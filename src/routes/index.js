@@ -8,6 +8,8 @@ const bankRoute = require('./bank.route')
 const positionRoute = require('./position.route')
 const branchRoute = require('./branch.route')
 const departmentRoute = require('./department.route')
+const motorRentalRoute = require('./motor_rental.route')
+const motorRentalDetailRoute = require('./motor_rental_detail.route')
 
 import { UnauthorizedError } from "../utils/error";
 import JWTProvider from "../utils/jwt-provider";
@@ -34,17 +36,19 @@ export default ({ config, db }) => {
   // api.use('/users', userRoute);
   // api.use('/roles', roleRoute);
   api.use('/auth', authRoute);
-
+  
   // Required with Authentication
   api.use(verify);
   api.use('/employees', userRoute);
-  api.use('/roles', roleRoute);
+  api.use('/motor/rentals', motorRentalRoute);
+  api.use('/motor/rentals/details', motorRentalDetailRoute);
   api.use('/taxes', taxRoute);
   api.use('/exchange/rate', exchangeRateRoute);
   api.use('/banks', bankRoute);
   api.use('/postions', positionRoute);
   api.use('/branchs', branchRoute);
   api.use('/department', departmentRoute);
+  api.use('/roles', roleRoute);
 
   return api;
 };
