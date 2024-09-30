@@ -10,6 +10,7 @@ const branchRoute = require('./branch.route')
 const departmentRoute = require('./department.route')
 const motorRentalRoute = require('./motor_rental.route')
 const motorRentalDetailRoute = require('./motor_rental_detail.route')
+const leaveRequestRoute = require('./leave_request.route')
 
 import { UnauthorizedError } from "../utils/error";
 import JWTProvider from "../utils/jwt-provider";
@@ -40,6 +41,7 @@ export default ({ config, db }) => {
   // Required with Authentication
   api.use(verify);
   api.use('/employees', userRoute);
+  api.use('/leave/request', leaveRequestRoute);
   api.use('/motor/rentals', motorRentalRoute);
   api.use('/motor/rentals/details', motorRentalDetailRoute);
   api.use('/taxes', taxRoute);

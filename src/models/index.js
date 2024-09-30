@@ -43,6 +43,7 @@ db.Branch = require('./branch')(sequelize, DataTypes);
 db.Department = require('./department')(sequelize, DataTypes);
 db.MotorRental = require('./motor_rentel')(sequelize, DataTypes);
 db.MotorRentalDetail = require('./motor_rental_detail')(sequelize, DataTypes);
+db.LeaveRequest = require('./leave_request')(sequelize, DataTypes);
 
 
 db.sequelize.sync({force: false})
