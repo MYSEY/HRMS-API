@@ -28,36 +28,17 @@ JWTProvider.getToken = (req) => {
   return token;
 };
 
-JWTProvider.getBsonPartner = (req) => JWTProvider.getObject(req, "partner")["_id"];
-
-JWTProvider.getUsername = (req) => {
+JWTProvider.getTokenUser = (req) => {
   try {
     let token = JWTProvider.getToken(req);
-    const username = jwt.verify(token, secretKey).username;
-    return username;
+    const user_id = jwt.verify(token, secretKey);
+    return user_id;
   } catch (e) {
     return "Annonymous";
   }
 };
 
-JWTProvider.getCompanyId = (req) => {
-  try {
-    let token = JWTProvider.getToken(req);
-    const company_id = jwt.verify(token, secretKey).company_id;
-    return company_id;
-  } catch (e) {
-    console.log(e);
-    throw e;
-    // return null;
-  }
-};
 
-JWTProvider.getBsonCompany = (req) => {
-  let sub = JWTProvider.getCompanyId(req);
-
-  if (ObjectId.isValid(sub)) return sub;
-  return null;
-};
 
 JWTProvider.getSub = (req) => {
   try {
@@ -75,25 +56,6 @@ JWTProvider.getBsonSub = (req) => {
   return null;
 };
 
-JWTProvider.getScope = (req) => {
-  try {
-    let token = JWTProvider.getToken(req);
-    return jwt.verify(token, secretKey).scopes;
-  } catch (e) {
-    return null;
-  }
-};
-JWTProvider.getPartnerType = (req) => {
-  try {
-    let token = JWTProvider.getToken(req);
-    const partner_type = jwt.verify(token, secretKey).partner_type;
-    return partner_type;
-  } catch (e) {
-    console.log(e);
-    throw e;
-    // return null;
-  }
-};
 JWTProvider.getObject = (req, key) => {
   try {
     let token = JWTProvider.getToken(req);
@@ -106,33 +68,7 @@ JWTProvider.getObject = (req, key) => {
   }
 };
 
-JWTProvider.getClaims = (req) => {
-  try {
-    let token = JWTProvider.getToken(req);
-    return jwt.verify(token, secretKey).claims;
-  } catch (e) {
-    console.log(e);
-    return null;
-  }
-};
 
-JWTProvider.containScope = async (scope, req) => {
-  try {
-    const scopes = JWTProvider.getScope(req);
-    if (
-      scopes == null ||
-      scopes[scope.title] == undefined ||
-      scopes[scope.title][scope.menu] == undefined ||
-      scopes[scope.title][scope.menu].indexOf(scope["scope"]) == -1
-    ) {
-      return false;
-    }
-    return true;
-  } catch (err) {
-    console.log(err);
-    return false;
-  }
-};
 
 JWTProvider.verifyToken = (req) => {
   try {
