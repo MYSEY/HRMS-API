@@ -6,6 +6,7 @@ import { Math } from "core-js";
 import JWTProvider from "../utils/jwt-provider";
 
 const User = db.user;
+const Position = db.Position;
 
 const getUser = catchAsync(async (req, res, next) => {
     /* #swagger.tags = ['Employees']
@@ -50,7 +51,17 @@ const getUserById = catchAsync(async (req, res, next) => {
     * #swagger.security = [{"bearerAuth": []}]
     */
     let { id } = req.query;
-    const user = await User.findOne({  attributes: {exclude: ['password', 'token']},where: { id } });
+    const user = await User.findOne({  
+        attributes: {exclude: ['password', 'token']},
+        where: { id },
+        include: [
+            {
+                model: Position, // Reference the associated model
+                attributes: ['name_english', 'name_khmer'], // Specify fields you want from LeaveType
+                required: false, // This ensures a LEFT JOIN (not INNER JOIN)
+            },
+        ],
+    });
     if (!user) return next(new HttpBadRequest("User not found", 404));
     res.status(200).json({
         'status': true,

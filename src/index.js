@@ -8,7 +8,7 @@ import middleware from "./middleware";
 import routes from "./routes";
 import { AttachResponder, ErrorHandler } from "./services/errorConfig";
 import swaggerUi from "swagger-ui-express";
-import swaggerFile from "../swagger_output.json";
+import swaggerFile from "./swagger_output.json";
 
 let app = express();
 app.server = http.createServer(app);
