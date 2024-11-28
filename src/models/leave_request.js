@@ -17,8 +17,8 @@ module.exports = (sequelize, DataTypes) => {
             type: DataTypes.INTEGER,
             allowNull: true
         },
-        line_manager_name: {
-            type: DataTypes.STRING,
+        line_manager_id: {
+            type: DataTypes.INTEGER,
             allowNull: true
         },
         handover_staff_id: {
