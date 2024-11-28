@@ -9,15 +9,17 @@ const User = db.user;
 const Role = db.role;
 const Permission = db.permission;
 const Position = db.Position;
+const Branch = db.Branch;
 
 const login = catchAsync(async (req, res, next) => {
   /*
     #swagger.tags = ['Authentication']
     #swagger.description = 'Endpoint to sign in a specific user,  available username => bundom, chivorn,metra with any password '
   */
-    const { number_employee, password } = req.body;
-    const result = await User.findOne({ where: { number_employee },
-      attributes: ["id",
+  const { number_employee, password } = req.body;
+  const result = await User.findOne({
+    where: { number_employee },
+    attributes: ["id",
       "number_employee",
       "last_name_kh",
       "first_name_kh",
@@ -36,44 +38,51 @@ const login = catchAsync(async (req, res, next) => {
       "status",
       "emp_status",
       "p_status"],
-      include: [
-          {
-              model: Position, // Reference the associated model
-              attributes: ['name_english', 'name_khmer'], // Specify fields you want from LeaveType
-              required: false, // This ensures a LEFT JOIN (not INNER JOIN)
-          },
-      ],
-     });
-     
-    if (result == null) return next(new HttpBadRequest(USER_EXCEPTION.CURREND_NAME_PASSWORD));
-    const resultRole = await Role.findOne({
-      where: {id: result.role_id},
+    include: [
+      {
+        model: Position, // Reference the associated model
+        attributes: ['name_english', 'name_khmer'], // Specify fields you want from LeaveType
+        required: false, // This ensures a LEFT JOIN (not INNER JOIN)
+      },
+      {
+        model: Branch,
+        attributes: ['branch_name_en', 'branch_name_kh'],
+        required: false,
+      },
+    ],
+  });
+
+  if (result == null) return next(new HttpBadRequest(USER_EXCEPTION.CURREND_NAME_PASSWORD));
+  const resultRole = await Role.findOne({
+    where: { id: result.role_id },
+    include: {
+      model: Permission,
+      order: [['id', 'DESC']],
+      as: 'Permission',
       include: {
         model: Permission,
-        order: [['id', 'DESC']],
-        as: 'Permission',
-        include: {
-            model: Permission,
-            as: 'Parents',
-        }
-      },
-    });
-    const compare_password = await bcrypt.compare(password, result.password);
+        as: 'Parents',
+      }
+    },
+  });
+  const compare_password = await bcrypt.compare(password, result.password);
 
-    if (!compare_password) return next(new HttpBadRequest(USER_EXCEPTION.CURREND_NAME_PASSWORD));
+  if (!compare_password) return next(new HttpBadRequest(USER_EXCEPTION.CURREND_NAME_PASSWORD));
 
-    let accessToken = JWTProvider.generateToken(result.id, {
-      Auth: result,
-      role: result.role_id,
-      role_type: resultRole.role_type,
-    });
+  let accessToken = JWTProvider.generateToken(result.id, {
+    Auth: result,
+    role: result.role_id,
+    role_type: resultRole.role_type,
+  });
+  req.params.userId = result.id;
+  res.status(200).json({
+    accessToken,
+    lifetime: JWTProvider.LifeTime,
+    user: result,
+    role: resultRole,
+    params: req.params, 
 
-    res.status(200).json({
-        accessToken,
-        lifetime: JWTProvider.LifeTime,
-        user: result,
-        role: resultRole
-    })
+  })
 });
 const logout = catchAsync(async (req, res, next) => {
   /*
@@ -88,8 +97,9 @@ const logout = catchAsync(async (req, res, next) => {
     return res.status(200).json({ message: 'Logout successful' });
   });
 });
+
 const register = catchAsync(async (req, res, next) => {
- /*
+  /*
     #swagger.tags = ['Authentication']
   */
 });

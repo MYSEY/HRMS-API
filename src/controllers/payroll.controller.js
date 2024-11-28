@@ -46,8 +46,8 @@ const getPayrollId = catchAsync(async (req, res, next) => {
     * #swagger.security = [{"bearerAuth": []}]
     */
     const user = JWTProvider.getTokenUser(req);
-    // const payroll = await Payroll.findOne({ where:{ "employee_id": user.Auth.id},order: [['payment_date', 'DESC']], });
-    const payroll = await Payroll.findOne({ where:{ "employee_id": user.Auth.id}});
+    const payroll = await Payroll.findOne({ where:{ "employee_id": user.Auth.id},order: [['payment_date', 'DESC']], });
+    // const payroll = await Payroll.findOne({ where:{ "employee_id": user.Auth.id}});
     if (!payroll) return next(new HttpBadRequest("Payroll not found", 404));
     res.status(200).json({
         'status': true,
