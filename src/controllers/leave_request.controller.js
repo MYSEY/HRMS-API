@@ -373,8 +373,6 @@ const createRequestLeave = catchAsync(async (req, res, next) => {
             return res.status(404).json({ error: 'Leave type not found' });
         }
 
-        
-
         if (!leaveAllocation) {
             await LeaveAllocation.create({
                 employee_id: userId,
@@ -394,11 +392,11 @@ const createRequestLeave = catchAsync(async (req, res, next) => {
             // leaveAllocation.total_special_leave += leaveType.type === "special_leave" ? - req.body.number_of_day : 0;
             // leaveAllocation.total_unpaid_leave += leaveType.type === "unpaid_leave" ? - req.body.number_of_day : 0;
 
-            leaveAllocation.total_annual_leave = leaveType.type == "annual_leave" ? leaveAllocation.total_annual_leave - req.body.number_of_day : leaveAllocation.total_annual_leave;
-            leaveAllocation.total_sick_leave = leaveType.type == "sick_leave" ? leaveAllocation.total_sick_leave - req.body.number_of_day : leaveAllocation.total_sick_leave;
-            leaveAllocation.total_special_leave = leaveType.type == "special_leave" ? leaveAllocation.total_special_leave - req.body.number_of_day : leaveAllocation.total_special_leave;
-            leaveAllocation.total_unpaid_leave = leaveType.type == "unpaid_leave" ? leaveAllocation.total_unpaid_leave - req.body.number_of_day : leaveAllocation.total_unpaid_leave;
-            leaveAllocation.total_long_sick_leave = leaveType.type == "long_sick_leave" ? leaveAllocation.total_long_sick_leave - req.body.number_of_day : leaveAllocation.total_long_sick_leave;
+            leaveAllocation.total_annual_leave = leaveType.type == "annual_leave" ? parseFloat(leaveAllocation.total_annual_leave) - req.body.number_of_day : leaveAllocation.total_annual_leave;
+            leaveAllocation.total_sick_leave = leaveType.type == "sick_leave" ? parseFloat(leaveAllocation.total_sick_leave) - req.body.number_of_day : leaveAllocation.total_sick_leave;
+            leaveAllocation.total_special_leave = leaveType.type == "special_leave" ? parseFloat(leaveAllocation.total_special_leave) - req.body.number_of_day : leaveAllocation.total_special_leave;
+            leaveAllocation.total_unpaid_leave = leaveType.type == "unpaid_leave" ? parseFloat(leaveAllocation.total_unpaid_leave) - req.body.number_of_day : leaveAllocation.total_unpaid_leave;
+            leaveAllocation.total_long_sick_leave = leaveType.type == "long_sick_leave" ? parseFloat(leaveAllocation.total_long_sick_leave) - req.body.number_of_day : leaveAllocation.total_long_sick_leave;
             await leaveAllocation.save({ transaction });
         }
       
@@ -421,9 +419,183 @@ const createRequestLeave = catchAsync(async (req, res, next) => {
     //     return res.status(500).json({ error: 'Leave request creation failed.' });
     // }
 });
+
+const updateLeaveRequest = catchAsync(async (req, res, next) => {
+     /* #swagger.tags = ['Leave Requests']
+    * #swagger.security = [{"bearerAuth": []}]
+    */
+    //  const transaction = await db.sequelize.transaction();
+    // try {
+        const userAuth = JWTProvider.getTokenUser(req);
+        const userId = userAuth.Auth.id; 
+        const { id, leave_type_id, start_date, end_date, start_half_day, end_half_day, number_of_day, reason, delegate_id } = req.body;
+
+        const dataDubplicate = {
+            ...req.body,
+            start_date: moment(req.body.start_date).format('YYYY-MM-DD', true),
+            end_date: moment(req.body.end_date).format('YYYY-MM-DD', true),
+            start_half_day: req.body.start_half_day || null,
+            end_half_day: req.body.end_half_day || null,
+        };
+        const duplicate = await duplicateLeave(dataDubplicate, userId);
+        if (duplicate) {
+            return res.status(404).json({ error: 'Start date and End date already exists' });
+        }
+
+        const leaveAllocation = await LeaveAllocation.findOne({ where: { employee_id: userId } });
+        const leaveType = await LeaveType.findByPk(leave_type_id);
+        const data = await LeaveRequest.findByPk(id, { include: ['leaveType'] });
+        const delegateLeave = await DelegateLeave.findOne({
+            where: { requester_id: data.employee_id, start_date: data.start_date, end_date: data.end_date }
+        });
+        let numberDayDiff = 0;
+        if (leaveType.type === data.leaveType.type) {
+            
+            if (parseFloat(number_of_day) == parseFloat(data.number_of_day)) {
+                numberDayDiff = 0;
+            }else{
+                numberDayDiff = parseFloat(data.number_of_day) - parseFloat(number_of_day) ;
+            }
+            leaveAllocation["total_annual_leave"] = leaveType.type === 'annual_leave' ? parseFloat(leaveAllocation.total_annual_leave) + numberDayDiff : leaveAllocation.total_annual_leave;
+            leaveAllocation["total_sick_leave"] = leaveType.type === 'sick_leave' ? parseFloat(leaveAllocation.total_sick_leave) + numberDayDiff : leaveAllocation.total_sick_leave;
+            leaveAllocation["total_special_leave"] = leaveType.type === 'special_leave' ? parseFloat(leaveAllocation.total_special_leave) + numberDayDiff : leaveAllocation.total_special_leave;
+            leaveAllocation["total_unpaid_leave"] = leaveType.type === 'unpaid_leave' ? parseFloat(leaveAllocation.total_unpaid_leave) + numberDayDiff : leaveAllocation.total_unpaid_leave;
+            leaveAllocation["total_long_sick_leave"] = leaveType.type === 'long_sick_leave' ? parseFloat(leaveAllocation.total_long_sick_leave) + numberDayDiff : leaveAllocation.total_long_sick_leave;
+            
+            await leaveAllocation.save({ transaction });
+        } else {
+            // // Adjust old leave allocation
+            const adjustLeave = (type, numberDay) => {
+                leaveAllocation[`total_${type}`] = (parseFloat(leaveAllocation[`total_${type}`]) + parseFloat(numberDay));
+            };
+            adjustLeave(data.leaveType.type, number_of_day);
+
+            // // Adjust new leave allocation
+            leaveAllocation[`total_${leaveType.type}`] -= number_of_day;
+            await leaveAllocation.save({ transaction });
+        }
+        
+        // Update or create delegate leave
+        if (delegateLeave) {
+            delegateLeave.delegate_id = delegate_id || delegateLeave.delegate_id;
+            delegateLeave.start_date = start_date;
+            delegateLeave.end_date = end_date;
+            delegateLeave.number_of_day = number_of_day;
+            await delegateLeave.save({ transaction });
+        } else if (delegate_id) {
+            await DelegateLeave.create({
+                requester_id: userId,
+                delegate_id,
+                number_of_day,
+                start_date,
+                end_date,
+            }, { transaction });
+        }
+
+        // Update leave request
+        data.leave_type_id = leave_type_id;
+        data.start_date = start_date;
+        data.start_half_day = start_half_day;
+        data.end_date = end_date;
+        data.end_half_day = end_half_day;
+        data.number_of_day = number_of_day;
+        data.reason = reason;
+        data.updated_by = userId;
+        await data.save({ transaction });
+
+        await transaction.commit(); // Commit transaction
+
+        return res.status(200).json({ success: 'leave_request_created_successfully' });
+    // } catch (error) {
+    //     await transaction.rollback(); // Rollback transaction
+    //     console.error(error);
+    //     return res.status(500).json({ error: 'Leave request update failed' });
+    // }
+});
+
+const deleteLeave = catchAsync(async (req, res, next) => {
+    /* #swagger.tags = ['Leave Requests']
+    * #swagger.security = [{"bearerAuth": []}]
+    */
+    const transaction = await db.sequelize.transaction();
+    try {
+        // Fetch the LeaveRequest with related leaveType
+        const data = await LeaveRequest.findOne({
+            where: { id: req.body.id },
+            include: [{ model: LeaveType, required: false, }],
+            transaction,
+        });
+        if (!data) {
+            return res.status(404).json({ message: 'Leave request not found' });
+        }
+
+        // Fetch LeaveAllocation for the employee
+        const leaveAllocation = await LeaveAllocation.findOne({
+            where: { employee_id: data.employee_id },
+            transaction,
+        });
+
+        if (!leaveAllocation) {
+            return res.status(404).json({ message: 'Leave allocation not found' });
+        }
+
+        // Adjust leave allocation based on leave type
+        const leaveType = data.leaveType.type;
+        const numberOfDays = parseFloat(data.number_of_day);
+        console.log("numberOfDays: ", numberOfDays);
+
+        if (leaveType === 'annual_leave') {
+            const currentAnnualLeave = parseFloat(leaveAllocation.total_annual_leave) + numberOfDays;
+            leaveAllocation.total_annual_leave = currentAnnualLeave > leaveAllocation.default_annual_leave ? leaveAllocation.default_annual_leave : currentAnnualLeave;
+        } else if (leaveType === 'sick_leave') {
+            const currentSickLeave = parseFloat(leaveAllocation.total_sick_leave) + numberOfDays;
+            leaveAllocation.total_sick_leave = currentSickLeave > leaveAllocation.default_sick_leave ? leaveAllocation.default_sick_leave : currentSickLeave;
+        } else if (leaveType === 'special_leave') {
+            const currentSpecialLeave = parseFloat(leaveAllocation.total_special_leave) + numberOfDays;
+            leaveAllocation.total_special_leave = currentSpecialLeave > leaveAllocation.default_special_leave ? leaveAllocation.default_special_leave : currentSpecialLeave;
+        } else if (leaveType === 'unpaid_leave') {
+            const currentUnpaidLeave = parseFloat(leaveAllocation.total_unpaid_leave) + numberOfDays;
+            leaveAllocation.total_unpaid_leave = currentUnpaidLeave > leaveAllocation.default_unpaid_leave ? leaveAllocation.default_unpaid_leave : currentUnpaidLeave;
+        } else if (leaveType === 'long_sick_leave') {
+            const currentLongSickLeave = parseFloat(leaveAllocation.total_long_sick_leave) + numberOfDays;
+            leaveAllocation.total_long_sick_leave = currentLongSickLeave > leaveAllocation.default_long_sick_leave ? leaveAllocation.default_long_sick_leave : currentLongSickLeave;
+        }
+
+        // Save the updated leave allocation
+        await leaveAllocation.save({ transaction });
+
+        // Delete related delegate leave records
+        await DelegateLeave.destroy({
+            where: {
+                requester_id: data.employee_id,
+                start_date: data.start_date,
+                end_date: data.end_date,
+            },
+            transaction,
+        });
+
+        // Delete the leave request
+        await LeaveRequest.destroy({ where: { id: req.body.id }, transaction });
+
+        // Commit the transaction
+        await transaction.commit();
+
+        // Success response
+        return res.status(200).json({ message: 'Leave request deleted successfully' });
+    } catch (error) {
+        // Rollback transaction in case of error
+        await transaction.rollback();
+
+        // Error response
+        return res.status(500).json({ message: 'Leave request deletion failed', error: error.message });
+    }
+})
+
 module.exports = {
     getLeaveRequests,
     getLeaveRequestId,
     getEmployees,
-    createRequestLeave
+    createRequestLeave,
+    updateLeaveRequest,
+    deleteLeave
 };

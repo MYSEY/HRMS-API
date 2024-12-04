@@ -46,6 +46,11 @@ module.exports = (sequelize, DataTypes) => {
             allowNull: false,
             defaultValue: null
         },
+        total_long_sick_leave:{
+            type: DataTypes.STRING,
+            allowNull: false,
+            defaultValue: null
+        },
         year_1:{
             type: DataTypes.STRING,
             allowNull: false,

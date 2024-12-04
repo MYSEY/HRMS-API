@@ -1,7 +1,7 @@
 // const user = require("./user");
 
 module.exports = (sequelize, DataTypes) => {
-    const LeaveType = sequelize.define("Leave Type", {
+    const LeaveType = sequelize.define("leaveType", {
         name:{
             type: DataTypes.STRING,
             allowNull: false,
