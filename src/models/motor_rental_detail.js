@@ -117,6 +117,32 @@ module.exports = (sequelize, DataTypes) => {
             type: DataTypes.DECIMAL(50,2),
             allowNull: false
         },
+
+
+        adjust_amount_exclude:{
+            type: DataTypes.DECIMAL(50,2),
+            allowNull: false
+        },
+        adjust_amount_tabple_exclude:{
+            type: DataTypes.DECIMAL(50,2),
+            allowNull: false
+        },
+        adjust_amount_include:{
+            type: DataTypes.DECIMAL(50,2),
+            allowNull: false
+        },
+        adjust_amount_tabple_include:{
+            type: DataTypes.DECIMAL(50,2),
+            allowNull: false
+        },
+        adjust_amount_kh:{
+            type: DataTypes.DECIMAL(50,2),
+            allowNull: false
+        },
+        adjust_amount_engine_oil:{
+            type: DataTypes.DECIMAL(50,2),
+            allowNull: false
+        },
         tax_rate: {
             type: DataTypes.INTEGER,
             allowNull: false,
@@ -124,6 +150,14 @@ module.exports = (sequelize, DataTypes) => {
         status: {
             type: DataTypes.INTEGER,
             allowNull: false,
+        },
+        from_date: {
+            type: DataTypes.DATE,
+            allowNull: false
+        },
+        to_date: {
+            type: DataTypes.DATE,
+            allowNull: false
         },
         created_by: {
             type: DataTypes.INTEGER,

@@ -4,6 +4,7 @@ const {
     getUser,
     getUserById,
     userCreate,
+    changePassword,
     updateUser,
     deleteUser 
 } = require('../controllers/user.controller');
@@ -13,6 +14,7 @@ const router = express.Router();
 
 router.get('/view', getUser);
 router.get('/view-by-id', getUserById);
+router.post('/change/password', changePassword);
 router.post('/create',  validate(userCreateRequest, {}, { allowUnknown: false }), userCreate);
 router.put('/edit', validate(userUpdateRequest, {}, { allowUnknown: false }), updateUser);
 router.delete('/delete', deleteUser);

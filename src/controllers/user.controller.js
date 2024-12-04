@@ -6,6 +6,7 @@ import { Math } from "core-js";
 import JWTProvider from "../utils/jwt-provider";
 
 const User = db.user;
+const Position = db.Position;
 
 const getUser = catchAsync(async (req, res, next) => {
     /* #swagger.tags = ['Employees']
@@ -50,7 +51,17 @@ const getUserById = catchAsync(async (req, res, next) => {
     * #swagger.security = [{"bearerAuth": []}]
     */
     let { id } = req.query;
-    const user = await User.findOne({  attributes: {exclude: ['password', 'token']},where: { id } });
+    const user = await User.findOne({  
+        attributes: {exclude: ['password', 'token']},
+        where: { id },
+        include: [
+            {
+                model: Position, // Reference the associated model
+                attributes: ['name_english', 'name_khmer'], // Specify fields you want from LeaveType
+                required: false, // This ensures a LEFT JOIN (not INNER JOIN)
+            },
+        ],
+    });
     if (!user) return next(new HttpBadRequest("User not found", 404));
     res.status(200).json({
         'status': true,
@@ -129,6 +140,44 @@ const updateUser = catchAsync(async (req, res, next) => {
     })
 });
 
+const changePassword = catchAsync(async (req, res, next) => {
+    /*
+      #swagger.tags = ['Employees']
+      #swagger.security = [{"bearerAuth": []}]
+    */
+  
+    // Change password function
+    const userAuth = JWTProvider.getTokenUser(req);
+    const { newPassword, confirmPassword } = req.body;
+      try {
+        // Validate passwords
+        if (!newPassword || !confirmPassword) {
+          return res.status(400).json({ message: 'Passwords are required.' });
+        }
+        if (newPassword !== confirmPassword) {
+          return res.status(400).json({ message: 'Passwords do not match.' });
+        }
+  
+        // Hash the new password
+        const saltRounds = 8;
+        const hashedPassword = await bcrypt.hash(newPassword, saltRounds);
+  
+        // Update password in the database
+        const user = await User.findByPk(userAuth.Auth.id); // Adjust for your ORM/query
+        if (!user) {
+          return res.status(404).json({ message: 'User not found.' });
+        }
+  
+        user.password = hashedPassword; // Assuming the password field is named `password`
+        await user.save();
+  
+        return res.status(200).json({ message: 'Password updated successfully.' });
+      } catch (error) {
+        console.error('Error updating password:', error);
+        return res.status(500).json({ message: 'Internal server error.' });
+      }
+  });
+
 const deleteUser = catchAsync(async (req, res, next) => {
     /* #swagger.tags = ['Employees']
     * #swagger.security = [{"bearerAuth": []}]
@@ -154,5 +203,6 @@ module.exports = {
     getUserById,
     userCreate,
     updateUser,
+    changePassword,
     deleteUser
 };

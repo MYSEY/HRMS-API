@@ -45,6 +45,7 @@
     "compression": "^1.5.2",
     "core-js": "^3.8.1",
     "cors": "^2.8.5",
+    "date-fns": "^4.1.0",
     "dotenv": "^16.0.1",
     "express": "^4.13.3",
     "express-validation": "^3.0.8",
