@@ -34,7 +34,10 @@ const getLeaveRequests = catchAsync(async (req, res, next) => {
         const Leave_allocation = await LeaveAllocation.findOne({where:{ employee_id: userAuth.Auth.id}});
 
         const LeaveRequests = await LeaveRequest.findAll({
-            // where:{ employee_id: userAuth.Auth.id},
+            where: {
+                employee_id: userAuth.Auth.id,
+                deleted_at: null, // Combine conditions here
+            },
             // limit: limit,
             // offset: offset,
             // attributes: [],
@@ -62,16 +65,43 @@ const getLeaveRequests = catchAsync(async (req, res, next) => {
         res.status(500).json({ message: 'Internal Server Error', error: error.message });
     }
 });
-const getLeaveRequestId = catchAsync(async (req, res, next) => {
+const getLeaveApproves = catchAsync(async (req, res, next) => {
     /* #swagger.tags = ['Leave Requests']
     * #swagger.security = [{"bearerAuth": []}]
     */
     let { id } = req.query;
-    const LeaveRequest = await LeaveRequest.findOne({where: { id } });
-    if (!LeaveRequest) return next(new HttpBadRequest("Leave Request not found", 404));
+    const userAuth = JWTProvider.getTokenUser(req);
+    const leaveRequests = await LeaveRequest.findAll({ 
+        where: {
+            next_approver: userAuth.Auth.id,
+            deleted_at: null,
+            status: {
+                [Op.in]: ["approved_lm", "pending"]
+            }
+        },
+        order: [['id', 'DESC']],
+        include: [
+            {
+                model: LeaveType,
+                attributes: ['name'],
+                required: false,
+            },
+            {
+                model: User,
+                attributes: ['employee_name_kh','employee_name_en'],
+                required: false,
+            },
+            {
+                model: User,
+                as: 'HandoverStaff',
+                attributes: ['employee_name_kh', 'employee_name_en'],
+                required: false,
+            },
+        ],
+    });
     res.status(200).json({
-        'status': true,
-        'data': LeaveRequest
+        'status': 200,
+        'datas': leaveRequests
     })
 });
 
@@ -155,6 +185,10 @@ async function duplicateLeave(requestData, employeeId) {
     let overlappingLeave = await LeaveRequest.findOne({
         where: {
             employee_id: employeeId,
+            deleted_at: null,
+            status: {
+                [Op.in]: ["approved_lm","approved_hod", "pending"]
+            },
             [Op.or]: [
                 {
                     start_date: {
@@ -194,6 +228,10 @@ async function duplicateLeave(requestData, employeeId) {
             overlappingLeave = await LeaveRequest.findOne({
                 where: {
                     employee_id: employeeId,
+                    deleted_at: null,
+                    status: {
+                        [Op.in]: ["approved_lm","approved_hod", "pending"]
+                    },
                     start_date: {
                         [Op.gte]: startDate,
                     },
@@ -209,6 +247,10 @@ async function duplicateLeave(requestData, employeeId) {
                 const overlappingLeave1 = await LeaveRequest.findOne({
                     where: {
                         employee_id: employeeId,
+                        deleted_at: null,
+                        status: {
+                            [Op.in]: ["approved_lm","approved_hod", "pending"]
+                        },
                         start_date: startDate,
                         start_half_day: startHalfDay,
                     },
@@ -221,6 +263,10 @@ async function duplicateLeave(requestData, employeeId) {
                 const overlappingLeave2 = await LeaveRequest.findOne({
                     where: {
                         employee_id: employeeId,
+                        deleted_at: null,
+                        status: {
+                            [Op.in]: ["approved_lm","approved_hod", "pending"]
+                        },
                         end_date: endDate,
                         end_half_day: endHalfDay,
                     },
@@ -232,6 +278,10 @@ async function duplicateLeave(requestData, employeeId) {
             const dataLeaves = await LeaveRequest.findOne({
                 where: {
                     employee_id: employeeId,
+                    deleted_at: null,
+                    status: {
+                        [Op.in]: ["approved_lm","approved_hod", "pending"]
+                    },
                     start_date: {
                         [Op.lte]: startDate,
                     },
@@ -513,6 +563,253 @@ const updateLeaveRequest = catchAsync(async (req, res, next) => {
     // }
 });
 
+const approveLeave = catchAsync(async (req, res, next) => {
+    /* #swagger.tags = ['Leave Requests']
+    * #swagger.security = [{"bearerAuth": []}]
+    */
+    const { id, remark } = req.body;
+    const userAuth = JWTProvider.getTokenUser(req);
+    const userId = userAuth.Auth.id;
+
+    try {
+        const data = await LeaveRequest.findOne({
+        where: { id },
+        include: [
+            {
+                model: User, 
+                attributes: ['employee_name_kh','employee_name_en', 'branch_id', 'department_id'],
+                required: false,
+            }
+        ]
+        });
+
+        const dataDepartment = await Department.findOne({
+            where: { id: data.User.department_id },
+        });
+
+        const dataBranch = await Branch.findOne({
+            where: { id: data.User.branch_id },
+        });
+
+        const role = userAuth.role_type;
+
+        const requestDate = moment(data.created_at).format('YYYY-MM-DD');
+
+        const delegateLeave = DelegateLeave.findAll({
+            where: {
+                delegate_id: data.next_approver,
+                start_date: { $lte: requestDate },
+                end_date: { $gte: requestDate },
+            }
+        });
+        
+        const delegateLeaveDepartment = await DelegateLeave.findOne({
+            where: { requester_id: dataDepartment.direct_manager_id },
+        });
+
+        if (['HOD', 'CEO', 'BOD'].includes(role)) {
+            const department = userAuth.Auth.Department;
+            if (delegateLeaveDepartment) {
+                data.next_approver = null;
+                data.status = 'approved_hod';
+            } else {
+                if (userId == department.direct_manager_id || ['CEO', 'BOD'].includes(role)) {
+                data.next_approver = null;
+                data.status = 'approved_hod';
+                } else {
+                const leaveDepartment = await DelegateLeave.findOne({
+                    where: {
+                    requester_id: dataDepartment.direct_manager_id,
+                    start_date: { $lte: requestDate },
+                    end_date: { $gte: requestDate }
+                    }
+                });
+
+                data.status = 'approved_lm';
+
+                if (leaveDepartment) {
+                    const delegate = await DelegateLeave.findOne({
+                    where: {
+                        requester_id: leaveDepartment.delegate_id,
+                        start_date: { $lte: requestDate },
+                        end_date: { $gte: requestDate }
+                    }
+                    });
+
+                    if (delegate) {
+                    data.next_approver = leaveDepartment.number_of_day < delegate.number_of_day ? delegate.requester_id : leaveDepartment.delegate_id;
+                    } else {
+                    data.next_approver = leaveDepartment.delegate_id;
+                    }
+                } else {
+                    data.next_approver = department.direct_manager_id;
+                }
+                }
+            }
+        } else if (role === 'BM') {
+            const delegateLeaveBranch = await DelegateLeave.findOne({
+                where: { requester_id: dataBranch.direct_manager_id },
+            });
+
+            const branch = userAuth.Auth.Branch;;
+
+            if (delegateLeaveBranch) {
+                data.next_approver = null;
+                data.status = 'approved_hod';
+            } else {
+                if (branch.direct_manager_id == userId) {
+                data.next_approver = null;
+                data.status = 'approved_hod';
+                } else {
+                const leaveBranch = await DelegateLeave.findOne({
+                    where: {
+                    requester_id: dataBranch.direct_manager_id,
+                    start_date: { $lte: requestDate },
+                    end_date: { $gte: requestDate }
+                    }
+                });
+
+                data.status = 'approved_lm';
+
+                if (leaveBranch) {
+                    const delegate = await DelegateLeave.findOne({
+                    where: {
+                        requester_id: leaveBranch.delegate_id,
+                        start_date: { $lte: requestDate },
+                        end_date: { $gte: requestDate }
+                    }
+                    });
+
+                    if (delegate) {
+                    data.next_approver = leaveBranch.number_of_day < delegate.number_of_day ? delegate.requester_id : leaveBranch.delegate_id;
+                    } else {
+                    data.next_approver = leaveBranch.delegate_id;
+                    }
+                } else {
+                    data.next_approver = branch.direct_manager_id;
+                }
+                }
+            }
+        } else if (['HR', 'HRAdmin'].includes(role)) {
+            data.status = 'approved';
+        }
+
+        // data.remark = remark;
+        data.approved_date = moment();
+        data.approved_by = data.approved_by ? `${data.approved_by},${userId}` : userId;
+
+        await data.save();
+
+        res.status(200).json({
+        message: 'The process has been successfully completed.',
+        });
+    } catch (error) {
+        console.error(error);
+        res.status(500).json({ message: error.message });
+    }
+})
+const rejectLeave = catchAsync(async (req, res, next) => {
+    /* #swagger.tags = ['Leave Requests']
+    * #swagger.security = [{"bearerAuth": []}]
+    */
+    const { id, remark, status } = req.body;
+
+    try {
+        // Find the Leave Request with associated LeaveType
+        const data = await LeaveRequest.findOne({
+            where: { id },
+            include: [
+                {
+                    model: LeaveType,
+                    attributes: ['name','type'],
+                    required: false,
+                },
+            ],
+        });
+        
+        if (!data) {
+        return res.status(404).json({ message: "Leave Request not found" });
+        }
+
+        const leaveAllocation = await LeaveAllocation.findOne({
+            where: { employee_id: data.employee_id },
+        });
+
+        if (!leaveAllocation) {
+        return res.status(404).json({ message: "Leave Allocation not found" });
+        }
+        // Update leave balances based on leave type
+        const { type } = data.leaveType;
+        const { number_of_day } = data;
+
+        if (type === "annual_leave") {
+            const currentAnnualLeave = leaveAllocation.total_annual_leave + number_of_day;
+            leaveAllocation.total_annual_leave = Math.min(
+                currentAnnualLeave,
+                leaveAllocation.default_annual_leave
+        );
+        } else if (type === "sick_leave") {
+            const currentSickLeave = leaveAllocation.total_sick_leave + number_of_day;
+            leaveAllocation.total_sick_leave = Math.min(
+                currentSickLeave,
+                leaveAllocation.default_sick_leave
+        );
+        } else if (type === "special_leave") {
+            const currentSpecialLeave = leaveAllocation.total_special_leave + number_of_day;
+            leaveAllocation.total_special_leave = Math.min(
+                currentSpecialLeave,
+                leaveAllocation.default_special_leave
+        );
+        } else if (type === "unpaid_leave") {
+            const currentUnpaidLeave = leaveAllocation.total_unpaid_leave + number_of_day;
+            leaveAllocation.total_unpaid_leave = Math.max(0, currentUnpaidLeave);
+        } else if (type === "long_sick_leave") {
+            const currentLongSickLeave = leaveAllocation.total_long_sick_leave + number_of_day;
+            leaveAllocation.total_long_sick_leave = Math.max(0, currentLongSickLeave);
+        }
+
+        // Determine status based on role
+        const userAuth = JWTProvider.getTokenUser(req);
+        const userId = userAuth.Auth.id;
+        const department = userAuth.Auth.Department;
+        const branch = userAuth.Auth.Branch;
+
+        if (["HOD", "CEO", "BOD"].includes(userAuth.role_type)) {
+            if (userId === department.direct_manager_id || ["CEO", "BOD"].includes(userAuth.role_type)) {
+                data.status = status === "cancel_hod" ? "cancel_hod" : "rejected_hod";
+            } else {
+                data.status = "rejected_lm";
+            }
+        } else if (userAuth.role_type === "BM") {
+            if (branch.direct_manager_id === userId) {
+                data.status = status === "cancel_hod" ? "cancel_hod" : "rejected_hod";
+            } else {
+                data.status = "rejected_lm";
+            }
+        } else if (["HR", "HRAdmin"].includes(userAuth.role_type)) {
+            data.status = status === "cancel" ? "cancel" : "rejected";
+        }
+
+        // Delete corresponding DelegateLeave entries
+        await DelegateLeave.destroy({
+        where: {
+            requester_id: data.employee_id,
+            start_date: data.start_date,
+            end_date: data.end_date,
+        },
+        });
+
+        // Update data and leaveAllocation
+        data.remark = remark;
+        await data.save();
+        await leaveAllocation.save();
+
+        res.status(200).json({ message: "The process has been successfully completed." });
+    } catch (error) {
+        console.error(error);
+        res.status(500).json({ message: error.message });
+    }
+})
 const deleteLeave = catchAsync(async (req, res, next) => {
     /* #swagger.tags = ['Leave Requests']
     * #swagger.security = [{"bearerAuth": []}]
@@ -593,9 +890,11 @@ const deleteLeave = catchAsync(async (req, res, next) => {
 
 module.exports = {
     getLeaveRequests,
-    getLeaveRequestId,
+    getLeaveApproves,
     getEmployees,
     createRequestLeave,
     updateLeaveRequest,
-    deleteLeave
+    approveLeave,
+    rejectLeave,
+    deleteLeave,
 };
