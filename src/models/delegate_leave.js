@@ -1,5 +1,5 @@
 module.exports = (sequelize, DataTypes) => {
-    const DelegateLeave = sequelize.define("Delegate Leaves", {
+    const DelegateLeave = sequelize.define("DelegateLeaves", {
         requester_id:{
             type: DataTypes.INTEGER,
             allowNull: false,

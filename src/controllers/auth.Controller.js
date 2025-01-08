@@ -9,7 +9,9 @@ const User = db.user;
 const Role = db.role;
 const Permission = db.permission;
 const Position = db.Position;
+const Department = db.Department;
 const Branch = db.Branch;
+
 
 const login = catchAsync(async (req, res, next) => {
   /*
@@ -45,8 +47,13 @@ const login = catchAsync(async (req, res, next) => {
         required: false, // This ensures a LEFT JOIN (not INNER JOIN)
       },
       {
+        model: Department,
+        attributes: ['direct_manager_id', 'name_english', 'name_khmer'],
+        required: false,
+      },
+      {
         model: Branch,
-        attributes: ['branch_name_en', 'branch_name_kh'],
+        attributes: ['direct_manager_id', 'branch_name_en', 'branch_name_kh'],
         required: false,
       },
     ],

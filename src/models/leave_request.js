@@ -1,5 +1,5 @@
 module.exports = (sequelize, DataTypes) => {
-    const LeaveRequest = sequelize.define("Leave Request", {
+    const LeaveRequest = sequelize.define("LeaveRequest", {
         id: {
             type: DataTypes.INTEGER,
             primaryKey: true,
@@ -113,6 +113,8 @@ module.exports = (sequelize, DataTypes) => {
         tableName: 'leave_requests',
         timestamps: false
     });
+
+    
 
     return LeaveRequest
 }
