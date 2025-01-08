@@ -2,6 +2,7 @@ const db = require('../models');
 const { HttpBadRequest } = require('../services/error');
 const catchAsync = require('../utils/catchAsync');
 import { Math } from "core-js";
+import { Op } from "sequelize";
 
 const PublicHoliday = db.PublicHoliday;
 
@@ -54,7 +55,35 @@ const getPublicHolidayId = catchAsync(async (req, res, next) => {
     })
 });
 
+const searchHolidays = async (req, res) => {
+    /* #swagger.tags = ['Public Holidays']
+    */
+
+    console.log("data: ", req.body);
+    try {
+        let from_date = req.query.from_date ? new Date(req.query.from_date) : null;
+        let to_date = req.query.to_date ? new Date(req.query.to_date) : null;
+
+        const whereCondition = {};
+        
+        if (from_date) {
+            whereCondition.from = { [Op.gte]: from_date };
+        }
+        if (to_date) {
+            whereCondition.to = { [Op.lte]: to_date };
+        }
+
+        const data = await PublicHoliday.findAll({ where: whereCondition });
+
+        return res.status(200).json({ datas: data });
+    } catch (error) {
+        console.error("Error fetching holidays:", error);
+        return res.status(500).json({ error: "Internal Server Error" });
+    }
+};
+
 module.exports = {
     getPublicHolidays,
-    getPublicHolidayId
+    getPublicHolidayId,
+    searchHolidays,
 };

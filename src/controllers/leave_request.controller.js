@@ -3,6 +3,7 @@ const { HttpBadRequest } = require('../services/error');
 const catchAsync = require('../utils/catchAsync');
 import { Math } from "core-js";
 import moment from "moment";
+import { sequelize } from "../models";
 import JWTProvider from "../utils/jwt-provider";
 const { Op } = require('sequelize');
 const { parse, isWeekend, eachDayOfInterval } = require('date-fns');
@@ -36,19 +37,26 @@ const getLeaveRequests = catchAsync(async (req, res, next) => {
         const LeaveRequests = await LeaveRequest.findAll({
             where: {
                 employee_id: userAuth.Auth.id,
-                deleted_at: null, // Combine conditions here
+                deleted_at: null,
             },
-            // limit: limit,
-            // offset: offset,
-            // attributes: [],
             order: [['id', 'DESC']],
             include: [
                 {
-                    model: LeaveType, // Reference the associated model
-                    attributes: ['name'], // Specify fields you want from LeaveType
-                    required: false, // This ensures a LEFT JOIN (not INNER JOIN)
+                    model: LeaveType,
+                    attributes: ['name'],
+                    required: false,
+                },
+                {
+                    model: DelegateLeave,
+                    as: 'DelegateLeave',
+                    required: false,
+                    where: sequelize.literal(`
+                        \`DelegateLeave\`.\`start_date\` = \`LeaveRequest\`.\`start_date\` AND
+                        \`DelegateLeave\`.\`end_date\` = \`LeaveRequest\`.\`end_date\`
+                    `),
                 },
             ],
+            distinct: true,
         });
 
         // Respond with data
@@ -96,6 +104,15 @@ const getLeaveApproves = catchAsync(async (req, res, next) => {
                 as: 'HandoverStaff',
                 attributes: ['employee_name_kh', 'employee_name_en'],
                 required: false,
+            },
+            {
+                model: DelegateLeave,
+                as: 'DelegateLeave',
+                required: false,
+                where: {
+                    start_date: sequelize.col('Leave Request.start_date'),
+                    end_date: sequelize.col('Leave Request.end_date'),
+                },
             },
         ],
     });
@@ -792,11 +809,11 @@ const rejectLeave = catchAsync(async (req, res, next) => {
 
         // Delete corresponding DelegateLeave entries
         await DelegateLeave.destroy({
-        where: {
-            requester_id: data.employee_id,
-            start_date: data.start_date,
-            end_date: data.end_date,
-        },
+            where: {
+                requester_id: Number(data.employee_id),
+                start_date: new Date(data.start_date),
+                end_date: new Date(data.end_date),
+            },
         });
 
         // Update data and leaveAllocation
@@ -839,7 +856,6 @@ const deleteLeave = catchAsync(async (req, res, next) => {
         // Adjust leave allocation based on leave type
         const leaveType = data.leaveType.type;
         const numberOfDays = parseFloat(data.number_of_day);
-        console.log("numberOfDays: ", numberOfDays);
 
         if (leaveType === 'annual_leave') {
             const currentAnnualLeave = parseFloat(leaveAllocation.total_annual_leave) + numberOfDays;
@@ -864,9 +880,9 @@ const deleteLeave = catchAsync(async (req, res, next) => {
         // Delete related delegate leave records
         await DelegateLeave.destroy({
             where: {
-                requester_id: data.employee_id,
-                start_date: data.start_date,
-                end_date: data.end_date,
+                requester_id: Number(data.employee_id),
+                start_date: new Date(data.start_date),
+                end_date: new Date(data.end_date),
             },
             transaction,
         });

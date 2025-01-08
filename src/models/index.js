@@ -51,14 +51,14 @@ db.MotorRentalDetail = require('./motor_rental_detail')(sequelize, DataTypes);
 
 db.LeaveRequest = require('./leave_request')(sequelize, DataTypes);
 db.LeaveType = require('./leave_type')(sequelize, DataTypes);
+db.DelegateLeave = require('./delegate_leave')(sequelize, DataTypes);
 // LeaveRequest model
 db.LeaveRequest.belongsTo(db.LeaveType, { foreignKey: 'leave_type_id' });
 db.LeaveRequest.belongsTo(db.user, { foreignKey: 'employee_id' });
 db.LeaveRequest.belongsTo(db.user, { as: 'HandoverStaff', foreignKey: 'handover_staff_id' });
+db.LeaveRequest.belongsTo(db.DelegateLeave, { as: 'DelegateLeave', foreignKey: 'employee_id', targetKey: 'requester_id'});
 // LeaveType model
 db.LeaveType.hasMany(db.LeaveRequest, { foreignKey: 'leave_type_id' });
-
-db.DelegateLeave = require('./delegate_leave')(sequelize, DataTypes);
 
 db.LeaveAllocation = require('./leave_allocation')(sequelize, DataTypes);
 db.Training = require('./training')(sequelize, DataTypes);
