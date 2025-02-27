@@ -41,6 +41,7 @@ db.user = require('./user')(sequelize, DataTypes);
 db.user.belongsTo(db.Position, { foreignKey: 'position_id' });
 db.user.belongsTo(db.Department, { foreignKey: 'department_id' });
 db.user.belongsTo(db.Branch, { foreignKey: 'branch_id' });
+db.user.belongsTo(db.role, { foreignKey: 'role_id' });
 
 db.tax = require('./tax')(sequelize, DataTypes);
 db.ExchangeRate = require('./exchange_rate')(sequelize, DataTypes);
@@ -61,7 +62,29 @@ db.LeaveRequest.belongsTo(db.DelegateLeave, { as: 'DelegateLeave', foreignKey: '
 db.LeaveType.hasMany(db.LeaveRequest, { foreignKey: 'leave_type_id' });
 
 db.LeaveAllocation = require('./leave_allocation')(sequelize, DataTypes);
+
 db.Training = require('./training')(sequelize, DataTypes);
+
+db.TrainingDetailStaff = require('./training_detail_staff')(sequelize, DataTypes);
+db.TrainingDetailStaff.belongsTo(db.user, { foreignKey: 'employee_id' });
+db.TrainingDetailStaff.belongsTo(db.Training, { foreignKey: 'training_id' });
+
+db.TrainingDetailTrainer = require('./training_detail_trainer')(sequelize, DataTypes);
+
+db.Training.hasMany(db.TrainingDetailStaff, {
+    foreignKey: 'training_id',
+    as: 'Training', // ✅ Ensure alias is correct
+});
+
+db.TrainingDetailStaff.belongsTo(db.Training, {
+    foreignKey: 'training_id',
+    as: 'TrainingDetailStaffAlias', // ✅ Ensure alias is the same
+});
+
+// db.Training.hasMany(db.TrainingDetailStaff, { as: 'TrainingDetailStaffAlias', foreignKey: 'training_id' });
+db.Training.hasMany(db.TrainingDetailTrainer, { foreignKey: "training_id", as: "trainingDetailTrainer" });
+
+
 db.Payroll = require('./payroll')(sequelize, DataTypes);
 db.PublicHoliday = require('./public_holiday')(sequelize, DataTypes);
 

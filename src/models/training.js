@@ -1,6 +1,6 @@
 // const user = require("./user");
-
 module.exports = (sequelize, DataTypes) => {
+    
     const Training = sequelize.define("Training", {
         id: {
             type: DataTypes.BIGINT,
@@ -16,11 +16,11 @@ module.exports = (sequelize, DataTypes) => {
             allowNull: false,
         },
         trainer_id: {
-            type: DataTypes.JSON, // use DataTypes.INTEGER if a single integer ID is expected
+            type: DataTypes.JSON,
             allowNull: false,
         },
         employee_id: {
-            type: DataTypes.JSON, // use DataTypes.INTEGER if a single integer ID is expected
+            type: DataTypes.JSON,
             allowNull: false,
         },
         cost_price: {

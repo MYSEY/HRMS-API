@@ -3,8 +3,11 @@ const { HttpBadRequest } = require('../services/error');
 const catchAsync = require('../utils/catchAsync');
 import { Math } from "core-js";
 import JWTProvider from "../utils/jwt-provider";
-const { Op } = require('sequelize');
+const { Op, fn, col, literal } = require('sequelize');
 
+const User = db.user;
+const TrainingDetailStaff = db.TrainingDetailStaff;
+const TrainingDetailTrainer = db.TrainingDetailTrainer;
 const Training = db.Training;
 
 const getTrainings = catchAsync(async (req, res, next) => {
@@ -13,30 +16,49 @@ const getTrainings = catchAsync(async (req, res, next) => {
     */
     const { page = 1, page_size = 10 } = req.query;
 
-    // let limit = parseInt(page_size);
-    // let offset = (page - 1) * limit;
-    const user = JWTProvider.getTokenUser(req);
+    let limit = parseInt(page_size);
+    let offset = (page - 1) * limit;
+    const userAuth = JWTProvider.getTokenUser(req);
     
     try {
-        // Count the total number of Training
-        const data = await Training.findAndCountAll();
-
-        // Calculate total pages
-        // let pages = Math.ceil(data.count / limit);
-        console.log("user id: ",user.Auth.id);
-        const trainings = await Training.findAll({
-            "employee_id": {
-                // [Op.contains]: [user.Auth.id]
-                [Op.contains]: ["164"]
-            },
-            // attributes: [],
+        const TrainingDetailStaffs = await TrainingDetailStaff.findAll({
+            where: { employee_id: userAuth.Auth.id, deleted_at:null },
+            include: [
+                {
+                    model: User,
+                    attributes: ['number_employee', 'employee_name_kh', 'employee_name_en', 'date_of_commencement'],
+                    required: false,
+                },
+                {
+                    model: Training,
+                    as:"Training",
+                    where: { deleted_at:null },
+                    include: [
+                        {
+                            model: TrainingDetailStaff,
+                            as: 'Training',
+                            required: false,
+                            where: {
+                                training_id: { [Op.ne]: null },
+                                deleted_at:null
+                            },
+                            
+                        },
+                    ],
+                    attributes: {
+                        include: [
+                            [fn('COUNT', col('Training.id')), 'alias_count']
+                        ],
+                        exclude: ['employee_id', 'trainer_id'],
+                    },
+                    required: false,
+                },
+            ],
+            group: ['id'],
             order: [['id', 'DESC']],
         });
-
-        // Respond with data
         res.status(200).json({
-            datas: trainings,
-            count: data.count,
+            datas: TrainingDetailStaffs,
         });
 
     } catch (error) {

@@ -3,7 +3,7 @@ const { HttpBadRequest } = require('../services/error');
 const catchAsync = require('../utils/catchAsync');
 import { Math } from "core-js";
 import moment from "moment";
-import { sequelize } from "../models";
+import { role, sequelize } from "../models";
 import JWTProvider from "../utils/jwt-provider";
 const { Op } = require('sequelize');
 const { parse, isWeekend, eachDayOfInterval } = require('date-fns');
@@ -73,6 +73,72 @@ const getLeaveRequests = catchAsync(async (req, res, next) => {
         res.status(500).json({ message: 'Internal Server Error', error: error.message });
     }
 });
+const getLeaveOnbehalfs = catchAsync(async (req, res, next) => {
+    /* #swagger.tags = ['Leave Requests']
+    * #swagger.security = [{"bearerAuth": []}]
+    */
+    const { page = 1, page_size = 10 } = req.query;
+
+    let limit = parseInt(page_size);
+    let offset = (page - 1) * limit;
+    const userAuth = JWTProvider.getTokenUser(req);
+    
+    try {
+        // Count the total number of Motor rentals
+        const data = await LeaveRequest.findAndCountAll({where:{ request_to: userAuth.Auth.id}});
+
+        // Calculate total pages
+        let pages = Math.ceil(data.count / limit);
+
+        const LeaveRequests = await LeaveRequest.findAll({
+            where: {
+                request_to: userAuth.Auth.id,
+                deleted_at: null,
+            },
+            order: [['id', 'DESC']],
+            include: [
+                {
+                    model: LeaveType,
+                    attributes: ['name'],
+                    required: false,
+                },
+                {
+                    model: User,
+                    attributes: ['employee_name_kh','employee_name_en'],
+                    required: false,
+                },
+                {
+                    model: User,
+                    as: 'HandoverStaff',
+                    attributes: ['employee_name_kh', 'employee_name_en'],
+                    required: false,
+                },
+                {
+                    model: DelegateLeave,
+                    as: 'DelegateLeave',
+                    required: false,
+                    where: sequelize.literal(`
+                        \`DelegateLeave\`.\`start_date\` = \`LeaveRequest\`.\`start_date\` AND
+                        \`DelegateLeave\`.\`end_date\` = \`LeaveRequest\`.\`end_date\`
+                    `),
+                },
+            ],
+            distinct: true,
+        });
+
+        // Respond with data
+        res.status(200).json({
+            datas: LeaveRequests,
+            count: data.count,
+            pages: pages,
+            current_page: page
+        });
+
+    } catch (error) {
+        console.error('Error:', error.message); // Log detailed error
+        res.status(500).json({ message: 'Internal Server Error', error: error.message });
+    }
+});
 const getLeaveApproves = catchAsync(async (req, res, next) => {
     /* #swagger.tags = ['Leave Requests']
     * #swagger.security = [{"bearerAuth": []}]
@@ -82,9 +148,8 @@ const getLeaveApproves = catchAsync(async (req, res, next) => {
     const leaveRequests = await LeaveRequest.findAll({ 
         where: {
             next_approver: userAuth.Auth.id,
-            deleted_at: null,
             status: {
-                [Op.in]: ["approved_lm", "pending"]
+                [Op.in]: ["approved_lm","approved_hod","pending"]
             }
         },
         order: [['id', 'DESC']],
@@ -110,8 +175,8 @@ const getLeaveApproves = catchAsync(async (req, res, next) => {
                 as: 'DelegateLeave',
                 required: false,
                 where: {
-                    start_date: sequelize.col('Leave Request.start_date'),
-                    end_date: sequelize.col('Leave Request.end_date'),
+                    start_date: sequelize.col('LeaveRequest.start_date'),
+                    end_date: sequelize.col('LeaveRequest.end_date'),
                 },
             },
         ],
@@ -133,56 +198,45 @@ const getEmployees = catchAsync(async (req, res, next) =>{
     // Define a base filter for excluding the current user
     let filter = {
         where: {
-            id: { [Op.ne]: userAuth.Auth.id }
+            emp_status: { [Op.in]: ['Probation', '1', '2', '10'] }
         },
-        attributes: { exclude: ['password'] }
+        attributes: { exclude: ['password', 'pre_salary', 'basic_salary', 'salary_increas'] },
+        include: [
+            {
+                model: role,
+                attributes: ['role_type'],
+                required: false
+            }
+        ]
     };
+    
 
-    // Determine additional filters based on userAuth.role_type
+    // **Condition for BOD and CEO**
+    if (['BOD', 'CEO'].includes(userAuth.role_type)) {
+        filter.where.id = { [Op.ne]: userAuth.Auth.id };
+        filter.where = { line_manager: userAuth.Auth.id };
+        
+    }
+    if (['HR', 'HRAdmin', 'HOD'].includes(userAuth.role_type)) {
+        // HR, HR Admin, Head Detp
+        filter.where.department_id = userAuth.Auth.department_id;
+    } 
     if (userAuth.role_type === 'BM') {
         // Branch Manager
         filter.where.branch_id = userAuth.Auth.branch_id;
-    } else if (userAuth.role_type === 'HOD') {
-        // Head of Department
-        filter.where.department_id = userAuth.Auth.department_id;
-    } else if (userAuth.role_type === 'Employee') {
-        // Regular Employee with complex conditions
+    } 
+    if (userAuth.role_type === 'Employee') {
         filter.where = {
-            ...filter.where,
-            [Op.or]: [
-                { id: userAuth.Auth.line_manager },
-                { line_manager: userAuth.Auth.line_manager }
-            ],
             department_id: userAuth.Auth.department_id,
             branch_id: userAuth.Auth.branch_id
         };
-    } else if (['HR', 'HRAdmin'].includes(userAuth.role_type)) {
-        // HR or HR Admin
-        filter.where.department_id = userAuth.Auth.department_id;
-    }
+    } 
 
     // Execute the query
     employees = await User.findAll(filter);
 
-    // Set up role-based filtering for delegateEmployees
-    const roleFilter = {
-        where: {
-            id: { [Op.ne]: userAuth.Auth.id }      // Exclude the current user
-        },
-        attributes: { exclude: ['password'] }
-    };
-
-    // Apply filters based on role
-    if (userAuth.role_type === 'BM') {
-        roleFilter.where.branch_id = userAuth.Auth.branch_id;
-    } else if (userAuth.role_type === 'HOD') {
-        roleFilter.where.department_id = userAuth.Auth.department_id;
-    } else if (['HR', 'HRAdmin'].includes(userAuth.role_type)) {
-        roleFilter.where.department_id = userAuth.Auth.department_id;
-    }
-
     // Query for delegateEmployees without join
-    delegateEmployees = await User.findAll(roleFilter);
+    delegateEmployees = await User.findAll(filter);
 
     const LeaveTypes = await LeaveType.findAll();
     res.status(200).json({
@@ -360,7 +414,7 @@ const createRequestLeave = catchAsync(async (req, res, next) => {
     const transaction = await db.sequelize.transaction();
 
     const userAuth = JWTProvider.getTokenUser(req);
-    // try {
+    try {
         const userId = userAuth.Auth.id; // Assuming user authentication middleware sets req.user
         const duplicate = await duplicateLeave(data, userId);
         if (duplicate) {
@@ -480,6 +534,170 @@ const createRequestLeave = catchAsync(async (req, res, next) => {
             status: 200,
             data: resulf,
         });
+    } catch (error) {
+        await transaction.rollback();
+        console.error('Error creating leave request:', error);
+        return res.status(500).json({ error: 'Leave request creation failed.' });
+    }
+});
+
+const createOnbehalfLeave = catchAsync(async (req, res, next) => {
+    /* #swagger.tags = ['Leave Requests']
+    * #swagger.security = [{"bearerAuth": []}]
+    */
+    const { 
+        employee_id,
+        leave_type_id,
+        start_date,
+        end_date,
+        start_half_day,
+        end_half_day,
+        number_of_day,
+        handover_staff_id,
+        delegate_id,
+        reason,
+     } = req.body;
+     const data = {
+        ...req.body,
+        start_date: moment(req.body.start_date).format('YYYY-MM-DD', true),
+        end_date: moment(req.body.end_date).format('YYYY-MM-DD', true),
+        start_half_day: req.body.start_half_day || null,
+        end_half_day: req.body.end_half_day || null,
+    };
+    const startDate =  moment(req.body.start_date).format('YYYY-MM-DD', true);
+    const endDate =  moment(req.body.end_date).format('YYYY-MM-DD', true);
+    const transaction = await db.sequelize.transaction();
+
+    const userAuth = JWTProvider.getTokenUser(req);
+    let filter = {
+        where: {
+            id: employee_id 
+        },
+        attributes: { exclude: ['password', 'pre_salary','basic_salary','salary_increas'] },
+        include: [
+            {
+                model: role,
+                attributes: ['role_name','role_type'],
+                required: false,
+            },
+        ],
+        
+    };
+    const  employee = await User.findOne(filter);
+    // try {
+        const userId = employee.id; // Assuming user authentication middleware sets req.user
+        const duplicate = await duplicateLeave(data, userId);
+        if (duplicate) {
+            return res.status(404).json({
+                error: 'Start date and end date already exists',
+                status: 404,
+            });
+        }
+        const leaveAllocation = await LeaveAllocation.findOne({ where: { employee_id: userId }, transaction });
+        const leaveType = await LeaveType.findByPk(req.body.leave_type_id, { transaction });
+        
+        data.line_manager_id = employee.line_manager;
+
+        const dataBranch = await Branch.findByPk(employee.branch_id, { transaction });
+        const dataDepartment = await Department.findByPk(employee.department_id, { transaction });
+       
+        data.next_approver = dataBranch.abbreviations === "HQ" 
+            ? dataDepartment.direct_manager_id 
+            : dataBranch.direct_manager_id;
+
+        data.status = "pending";
+        
+        // Role-based approvals
+        if(employee.Role.role_type == "BOD") {
+            data.status = "approved_hod";
+            data.next_approver = null;
+        }else if (employee.Role.role_type == "CEO") {
+            data.next_approver = employee.line_manager;
+
+        }else if (employee.Role.role_type == "HOD" && userId === dataDepartment.direct_manager_id) {
+            data.next_approver = employee.line_manager;
+
+        }else if(employee.Role.role_type == "BM" && userId == dataBranch.direct_manager_id){
+            data.next_approver = employee.line_manager;
+
+        }else if(employee.Role.role_type == "HRAdmin" && userId == dataDepartment.direct_manager_id){
+            data.next_approver = employee.line_manager;
+        }
+
+        const requestDate = moment().format('YYYY-MM-DD');
+        const delegateLeave = await DelegateLeave.findOne({
+            where: {
+                requester_id: data.next_approver,
+                start_date: { [Op.lte]: requestDate },
+                end_date: { [Op.gte]: requestDate },
+            },
+            transaction,
+        });
+
+        if (delegateLeave) {
+            data.next_approver = delegateLeave.delegate_id;
+            const delegateLeaveRequest = await LeaveRequest.findOne({
+                where: {
+                    employee_id: delegateLeave.delegate_id,
+                    start_date: { [Op.lte]: requestDate },
+                    end_date: { [Op.gte]: requestDate },
+                },
+                transaction,
+            });
+            if (delegateLeaveRequest) {
+                const lineNumber1 = countWeekdays(requestDate, delegateLeave.end_date);
+                const lineNumber2 = countWeekdays(requestDate, delegateLeaveRequest.end_date);
+                data.next_approver = lineNumber1 <= lineNumber2 ? delegateLeave.requester_id : delegateLeaveRequest.employee_id;
+            }
+        }
+
+        if (req.body.delegate_id) {
+            await DelegateLeave.create({
+                requester_id: userId,
+                delegate_id: req.body.delegate_id,
+                number_of_day: req.body.number_of_day,
+                start_date:startDate ,
+                end_date: endDate,
+            }, { transaction });
+        }
+
+        if (!leaveType) {
+            return res.status(404).json({ error: 'Leave type not found' });
+        }
+
+        if (!leaveAllocation) {
+            await LeaveAllocation.create({
+                employee_id: userId,
+                default_annual_leave: 0,
+                default_sick_leave: 0,
+                default_special_leave: 0,
+                default_unpaid_leave: 0,
+                total_annual_leave: 0 - req.body.number_of_day,
+                total_sick_leave: 0,
+                total_special_leave: 0,
+                total_unpaid_leave: 0,
+                created_by: userId,
+            }, { transaction });
+        } else {
+            leaveAllocation.total_annual_leave = leaveType.type == "annual_leave" ? parseFloat(leaveAllocation.total_annual_leave) - req.body.number_of_day : leaveAllocation.total_annual_leave;
+            leaveAllocation.total_sick_leave = leaveType.type == "sick_leave" ? parseFloat(leaveAllocation.total_sick_leave) - req.body.number_of_day : leaveAllocation.total_sick_leave;
+            leaveAllocation.total_special_leave = leaveType.type == "special_leave" ? parseFloat(leaveAllocation.total_special_leave) - req.body.number_of_day : leaveAllocation.total_special_leave;
+            leaveAllocation.total_unpaid_leave = leaveType.type == "unpaid_leave" ? parseFloat(leaveAllocation.total_unpaid_leave) - req.body.number_of_day : leaveAllocation.total_unpaid_leave;
+            leaveAllocation.total_long_sick_leave = leaveType.type == "long_sick_leave" ? parseFloat(leaveAllocation.total_long_sick_leave) - req.body.number_of_day : leaveAllocation.total_long_sick_leave;
+            await leaveAllocation.save({ transaction });
+        }
+      
+        data.created_by = userAuth.Auth.id;
+        data.request_to = userAuth.Auth.id;
+
+        let resulf = await LeaveRequest.create(data, { transaction });
+
+        await transaction.commit();
+        return res.status(200).json({
+            success: 'leave request created successfully',
+            status: 200,
+            data: resulf,
+        });
     // } catch (error) {
     //     await transaction.rollback();
     //     console.error('Error creating leave request:', error);
@@ -491,12 +709,11 @@ const updateLeaveRequest = catchAsync(async (req, res, next) => {
      /* #swagger.tags = ['Leave Requests']
     * #swagger.security = [{"bearerAuth": []}]
     */
-    //  const transaction = await db.sequelize.transaction();
-    // try {
+     const transaction = await db.sequelize.transaction();
+    try {
         const userAuth = JWTProvider.getTokenUser(req);
         const userId = userAuth.Auth.id; 
-        const { id, leave_type_id, start_date, end_date, start_half_day, end_half_day, number_of_day, reason, delegate_id } = req.body;
-
+        let { id, leave_type_id, start_date, end_date, start_half_day, end_half_day, number_of_day, reason, delegate_id } = req.body;
         const dataDubplicate = {
             ...req.body,
             start_date: moment(req.body.start_date).format('YYYY-MM-DD', true),
@@ -504,44 +721,49 @@ const updateLeaveRequest = catchAsync(async (req, res, next) => {
             start_half_day: req.body.start_half_day || null,
             end_half_day: req.body.end_half_day || null,
         };
+
+        // console.log(req.body);
+        // return false;
         const duplicate = await duplicateLeave(dataDubplicate, userId);
         if (duplicate) {
             return res.status(404).json({ error: 'Start date and End date already exists' });
         }
+         
+        var leave_Allocation = await LeaveAllocation.findOne({ where: { employee_id: userId } });
+        const leaveType = await LeaveType.findOne({ where: { id: leave_type_id } });
+        var data = await LeaveRequest.findOne({ where: { id }, include: [{ model: LeaveType }] });
 
-        const leaveAllocation = await LeaveAllocation.findOne({ where: { employee_id: userId } });
-        const leaveType = await LeaveType.findByPk(leave_type_id);
-        const data = await LeaveRequest.findByPk(id, { include: ['leaveType'] });
-        const delegateLeave = await DelegateLeave.findOne({
+        var delegateLeave = await DelegateLeave.findOne({
             where: { requester_id: data.employee_id, start_date: data.start_date, end_date: data.end_date }
-        });
+        },{ transaction });
         let numberDayDiff = 0;
         if (leaveType.type === data.leaveType.type) {
-            
             if (parseFloat(number_of_day) == parseFloat(data.number_of_day)) {
                 numberDayDiff = 0;
             }else{
                 numberDayDiff = parseFloat(data.number_of_day) - parseFloat(number_of_day) ;
             }
-            leaveAllocation["total_annual_leave"] = leaveType.type === 'annual_leave' ? parseFloat(leaveAllocation.total_annual_leave) + numberDayDiff : leaveAllocation.total_annual_leave;
-            leaveAllocation["total_sick_leave"] = leaveType.type === 'sick_leave' ? parseFloat(leaveAllocation.total_sick_leave) + numberDayDiff : leaveAllocation.total_sick_leave;
-            leaveAllocation["total_special_leave"] = leaveType.type === 'special_leave' ? parseFloat(leaveAllocation.total_special_leave) + numberDayDiff : leaveAllocation.total_special_leave;
-            leaveAllocation["total_unpaid_leave"] = leaveType.type === 'unpaid_leave' ? parseFloat(leaveAllocation.total_unpaid_leave) + numberDayDiff : leaveAllocation.total_unpaid_leave;
-            leaveAllocation["total_long_sick_leave"] = leaveType.type === 'long_sick_leave' ? parseFloat(leaveAllocation.total_long_sick_leave) + numberDayDiff : leaveAllocation.total_long_sick_leave;
             
-            await leaveAllocation.save({ transaction });
+            leave_Allocation["total_annual_leave"] = leaveType.type === 'annual_leave' ? parseFloat(leave_Allocation.total_annual_leave) + numberDayDiff : leave_Allocation.total_annual_leave;
+            leave_Allocation["total_sick_leave"] = leaveType.type === 'sick_leave' ? parseFloat(leave_Allocation.total_sick_leave) + numberDayDiff : leave_Allocation.total_sick_leave;
+            leave_Allocation["total_special_leave"] = leaveType.type === 'special_leave' ? parseFloat(leave_Allocation.total_special_leave) + numberDayDiff : leave_Allocation.total_special_leave;
+            leave_Allocation["total_unpaid_leave"] = leaveType.type === 'unpaid_leave' ? parseFloat(leave_Allocation.total_unpaid_leave) + numberDayDiff : leave_Allocation.total_unpaid_leave;
+            leave_Allocation["total_long_sick_leave"] = leaveType.type === 'long_sick_leave' ? parseFloat(leave_Allocation.total_long_sick_leave) + numberDayDiff : leave_Allocation.total_long_sick_leave;
+            
+            await leave_Allocation.save({ transaction });
+            
         } else {
-            // // Adjust old leave allocation
+            
+            // Adjust old leave allocation
             const adjustLeave = (type, numberDay) => {
-                leaveAllocation[`total_${type}`] = (parseFloat(leaveAllocation[`total_${type}`]) + parseFloat(numberDay));
+                leave_Allocation[`total_${type}`] = (parseFloat(leave_Allocation[`total_${type}`]) + parseFloat(numberDay));
             };
             adjustLeave(data.leaveType.type, number_of_day);
 
-            // // Adjust new leave allocation
-            leaveAllocation[`total_${leaveType.type}`] -= number_of_day;
-            await leaveAllocation.save({ transaction });
+            // Adjust new leave allocation
+            leave_Allocation[`total_${leaveType.type}`] -= number_of_day;
+            await leave_Allocation.save({ transaction });
         }
-        
         // Update or create delegate leave
         if (delegateLeave) {
             delegateLeave.delegate_id = delegate_id || delegateLeave.delegate_id;
@@ -558,12 +780,12 @@ const updateLeaveRequest = catchAsync(async (req, res, next) => {
                 end_date,
             }, { transaction });
         }
-
+       
         // Update leave request
         data.leave_type_id = leave_type_id;
-        data.start_date = start_date;
+        data.start_date = moment(req.body.start_date).format('YYYY-MM-DD') ;
         data.start_half_day = start_half_day;
-        data.end_date = end_date;
+        data.end_date = moment(req.body.end_date).format('YYYY-MM-DD');
         data.end_half_day = end_half_day;
         data.number_of_day = number_of_day;
         data.reason = reason;
@@ -573,11 +795,11 @@ const updateLeaveRequest = catchAsync(async (req, res, next) => {
         await transaction.commit(); // Commit transaction
 
         return res.status(200).json({ success: 'leave_request_created_successfully' });
-    // } catch (error) {
-    //     await transaction.rollback(); // Rollback transaction
-    //     console.error(error);
-    //     return res.status(500).json({ error: 'Leave request update failed' });
-    // }
+    } catch (error) {
+        await transaction.rollback(); // Rollback transaction
+        console.error(error);
+        return res.status(500).json({ error: 'Leave request update failed' });
+    }
 });
 
 const approveLeave = catchAsync(async (req, res, next) => {
@@ -906,9 +1128,11 @@ const deleteLeave = catchAsync(async (req, res, next) => {
 
 module.exports = {
     getLeaveRequests,
+    getLeaveOnbehalfs,
     getLeaveApproves,
     getEmployees,
     createRequestLeave,
+    createOnbehalfLeave,
     updateLeaveRequest,
     approveLeave,
     rejectLeave,
