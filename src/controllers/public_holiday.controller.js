@@ -2,7 +2,7 @@ const db = require('../models');
 const { HttpBadRequest } = require('../services/error');
 const catchAsync = require('../utils/catchAsync');
 import { Math } from "core-js";
-import { Op } from "sequelize";
+import { Sequelize, Op } from "sequelize";
 
 const PublicHoliday = db.PublicHoliday;
 
@@ -22,7 +22,13 @@ const getPublicHolidays = catchAsync(async (req, res, next) => {
         // Calculate total pages
         let pages = Math.ceil(data.count / limit);
 
+        const currentYear = new Date().getFullYear();
         const PublicHolidays = await PublicHoliday.findAll({
+            where: {
+                [Op.and]: [
+                    Sequelize.where(Sequelize.fn("YEAR", Sequelize.col("from")), currentYear)
+                ]
+            }
             // limit: limit,
             // offset: offset,
             // attributes: [],
