@@ -37,11 +37,13 @@ db.role.hasMany(db.permission, {as: 'Permission', foreignKey: 'role_id'})
 db.Position = require('./position')(sequelize, DataTypes);
 db.Branch = require('./branch')(sequelize, DataTypes);
 db.Department = require('./department')(sequelize, DataTypes);
+db.Option = require('./option')(sequelize, DataTypes);
 db.user = require('./user')(sequelize, DataTypes);
 db.user.belongsTo(db.Position, { foreignKey: 'position_id' });
 db.user.belongsTo(db.Department, { foreignKey: 'department_id' });
 db.user.belongsTo(db.Branch, { foreignKey: 'branch_id' });
 db.user.belongsTo(db.role, { foreignKey: 'role_id' });
+db.user.belongsTo(db.Option, { foreignKey: 'gender' });
 
 db.tax = require('./tax')(sequelize, DataTypes);
 db.ExchangeRate = require('./exchange_rate')(sequelize, DataTypes);
