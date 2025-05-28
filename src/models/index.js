@@ -34,16 +34,25 @@ db.permission = require('./permission')(sequelize, DataTypes);
 db.permission.hasMany(db.permission, {as: 'Parents', foreignKey: 'parent_id'})
 db.role.hasMany(db.permission, {as: 'Permission', foreignKey: 'role_id'})
 
+db.Option = require('./option')(sequelize, DataTypes);
 db.Position = require('./position')(sequelize, DataTypes);
 db.Branch = require('./branch')(sequelize, DataTypes);
 db.Department = require('./department')(sequelize, DataTypes);
-db.Option = require('./option')(sequelize, DataTypes);
+db.ChildrenInfo = require('./children_infor')(sequelize, DataTypes);
+db.ChildrenInfo.belongsTo(db.Option, { as: 'Gender', foreignKey: 'sex' });
+db.Experience = require('./experience')(sequelize, DataTypes);
+
+db.Education = require('./education')(sequelize, DataTypes);
+db.Education.belongsTo(db.Option, { as: 'Degree', foreignKey: 'degree' });
+db.Education.belongsTo(db.Option, { as: 'FieldofStudy', foreignKey: 'field_of_study' });
+
 db.user = require('./user')(sequelize, DataTypes);
 db.user.belongsTo(db.Position, { foreignKey: 'position_id' });
 db.user.belongsTo(db.Department, { foreignKey: 'department_id' });
 db.user.belongsTo(db.Branch, { foreignKey: 'branch_id' });
 db.user.belongsTo(db.role, { foreignKey: 'role_id' });
 db.user.belongsTo(db.Option, { foreignKey: 'gender' });
+db.user.belongsTo(db.Option, { as: 'MarriedStatus', foreignKey: 'marital_status' });
 
 db.tax = require('./tax')(sequelize, DataTypes);
 db.ExchangeRate = require('./exchange_rate')(sequelize, DataTypes);

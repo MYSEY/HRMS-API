@@ -1,6 +1,9 @@
 import { Router } from "express";
 const roleRoute = require('./role.route');
 const userRoute = require('./user.route');
+const childrenInfoRoute = require('./childrenInfo.route');
+const experienceRoute = require('./experience.route');
+const educationRoute = require('./education.route');
 const authRoute = require('./auth.route')
 const taxRoute = require('./tax.route')
 const trainingRoute = require('./training.route')
@@ -47,6 +50,10 @@ export default ({ config, db }) => {
   // Required with Authentication
   api.use(verify);
   api.use('/employees', userRoute);
+  api.use('/children/infor', childrenInfoRoute);
+  api.use('/experience', experienceRoute);
+  api.use('/education', educationRoute);
+  
   api.use('/leave/request', leaveRequestRoute);
   api.use('/leave/type', leaveTypeRoute);
   api.use('/leave/allocation', leaveAllocationRoute);
