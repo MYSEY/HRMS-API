@@ -5,6 +5,7 @@ import * as bcrypt from "bcryptjs";
 import { Math } from "core-js";
 import JWTProvider from "../utils/jwt-provider";
 const { Op } = require('sequelize');
+const { getPermission } = require('../services/rolePermission');
 
 const User = db.user;
 const Position = db.Position;
@@ -12,6 +13,7 @@ const role = db.role;
 const Branch = db.Branch;
 const Department = db.Department;
 const Option = db.Option;
+const Permission = db.permission
 
 const getUser = catchAsync(async (req, res, next) => {
     /* #swagger.tags = ['Employees']
@@ -21,7 +23,6 @@ const getUser = catchAsync(async (req, res, next) => {
 
     let limit = parseInt(page_size);
     let offset = (page - 1) * limit;
-    
     try {
         // Count the total number of users
         const data = await User.findAndCountAll();
@@ -29,21 +30,58 @@ const getUser = catchAsync(async (req, res, next) => {
         // Calculate total pages
         let pages = Math.ceil(data.count / limit);
 
+        const userAuth = JWTProvider.getTokenUser(req);
+        let url = "users";
+        const permission = await getPermission(userAuth.role, url);
+        let filter = {
+            where: {
+                emp_status: { [Op.in]: ['Probation', '1', '2', '10'] },
+                deleted_at: null,
+            },
+        };
+        // if (in_array(userAuth.role_type, ['admin','HRAdmin','developer','BOD','CEO'])){
+            
+        
+        // }
+        // if (userAuth.role_type == 'HR' && permission.is_access == "1") {
+            
+        // }
+
+        // Use Array.includes() instead of in_array
+        if (['HR', 'DHOD', 'DBM'].includes(userAuth.role_type) && permission.is_access !== "1") {
+            filter.where.line_manager = userAuth.id;
+            filter.where.department_id = userAuth.Auth.department_id;
+            filter.where.branch_id = userAuth.Auth.branch_id;
+        }
+
+        // Combine HOD and BM conditions
+        if (['HOD', 'BM'].includes(userAuth.role_type)) {
+            filter.where.department_id = userAuth.Auth.department_id;
+            filter.where.branch_id = userAuth.Auth.branch_id;
+        }
+
+        if (userAuth.role_type === 'Employee') {
+            filter.where.id = userAuth.id; // Corrected from filter.id
+        }
+
         // Fetch users with pagination
         let excludeSet = [
             'password', 'pre_salary', 'basic_salary', 'salary_increas'
         ];
         const users = await User.findAll({
-            where: {
-                emp_status: { [Op.in]: ['Probation', '1', '2', '10'] },
-                deleted_at: null,
-            },
+            ...filter,
             attributes: {
                 exclude: excludeSet
             },
             include: [
                 {
                     model: Option,
+                    attributes: ['name_khmer','name_english'],
+                    required: false,
+                },
+                {
+                    model: Option,
+                    as: "MarriedStatus",
                     attributes: ['name_khmer','name_english'],
                     required: false,
                 },
@@ -92,7 +130,6 @@ const getUserById = catchAsync(async (req, res, next) => {
     * #swagger.security = [{"bearerAuth": []}]
     */
     const id =  req.params.id;
-    console.log("Employee ID: ", id);
     let excludeSet = [
         'password', 'pre_salary', 'basic_salary', 'salary_increas'
     ];
@@ -107,6 +144,12 @@ const getUserById = catchAsync(async (req, res, next) => {
         include: [
             {
                 model: Option,
+                attributes: ['name_khmer','name_english'],
+                required: false,
+            },
+            {
+                model: Option,
+                as: "MarriedStatus",
                 attributes: ['name_khmer','name_english'],
                 required: false,
             },

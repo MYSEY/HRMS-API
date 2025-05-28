@@ -59,15 +59,16 @@ const login = catchAsync(async (req, res, next) => {
     ],
   });
 
-  // if(result.status == "Unactive" || result.p_status == 0){
-  //   res.status(200).json({
-  //     lifetime: '',
-  //     user: result,
-  //     role: {},
-  //     params: '', 
-  //   })
-  //   return false;
-  // }
+  if(result.status == "Unactive" && result.p_status == 0){
+    console.log("result: ", result);
+    res.status(200).json({
+      lifetime: '',
+      user: result,
+      role: {},
+      params: '', 
+    })
+    return false;
+  }
 
   if (result == null) return next(new HttpBadRequest(USER_EXCEPTION.CURREND_NAME_PASSWORD));
   const resultRole = await Role.findOne({
