@@ -9,7 +9,7 @@ const {
 
 const router = express.Router();
 
-router.get('/view-by-id', getExperienceId);
+router.get('/view-by-id/:id', getExperienceId);
 router.post('/create', createExperience);
 router.delete('/delete', deleteExperience);
 router.post('/update', updateExperience);

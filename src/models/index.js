@@ -41,6 +41,7 @@ db.Department = require('./department')(sequelize, DataTypes);
 db.ChildrenInfo = require('./children_infor')(sequelize, DataTypes);
 db.ChildrenInfo.belongsTo(db.Option, { as: 'Gender', foreignKey: 'sex' });
 db.Experience = require('./experience')(sequelize, DataTypes);
+db.Experience.belongsTo(db.Option, { as: 'type', foreignKey: 'employment_type' });
 
 db.Education = require('./education')(sequelize, DataTypes);
 db.Education.belongsTo(db.Option, { as: 'Degree', foreignKey: 'degree' });
@@ -97,6 +98,7 @@ db.Training.hasMany(db.TrainingDetailTrainer, { foreignKey: "training_id", as: "
 
 
 db.Payroll = require('./payroll')(sequelize, DataTypes);
+db.Payroll.belongsTo(db.user, { foreignKey: 'employee_id' });
 db.PublicHoliday = require('./public_holiday')(sequelize, DataTypes);
 
 

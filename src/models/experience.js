@@ -17,7 +17,7 @@ module.exports = (sequelize, DataTypes) => {
             // }
         },
         employment_type: {
-            type: DataTypes.INTEGER,
+            type: DataTypes.STRING,
             allowNull: true
         },
         company_name: {

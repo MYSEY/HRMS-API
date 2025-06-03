@@ -49,7 +49,7 @@ const getUser = catchAsync(async (req, res, next) => {
 
         // Use Array.includes() instead of in_array
         if (['HR', 'DHOD', 'DBM'].includes(userAuth.role_type) && permission.is_access !== "1") {
-            filter.where.line_manager = userAuth.id;
+            filter.where.line_manager = userAuth.Auth.id;
             filter.where.department_id = userAuth.Auth.department_id;
             filter.where.branch_id = userAuth.Auth.branch_id;
         }
@@ -61,7 +61,7 @@ const getUser = catchAsync(async (req, res, next) => {
         }
 
         if (userAuth.role_type === 'Employee') {
-            filter.where.id = userAuth.id; // Corrected from filter.id
+            filter.where.id = userAuth.Auth.id; // Corrected from filter.id
         }
 
         // Fetch users with pagination

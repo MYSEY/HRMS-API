@@ -29,11 +29,27 @@ module.exports = (sequelize, DataTypes) => {
             type: DataTypes.DECIMAL,
             allowNull: true,
           },
+          monthly_quarterly_bonuses: {
+            type: DataTypes.DECIMAL,
+            allowNull: true,
+          },
           total_kny_phcumben: {
             type: DataTypes.DECIMAL(50, 2),
             defaultValue: 0,
           },
+          annual_incentive_bonus: {
+            type: DataTypes.DECIMAL(50, 2),
+            defaultValue: 0,
+          },
+          seniority_pay_included_tax: {
+            type: DataTypes.DECIMAL(50, 2),
+            defaultValue: 0,
+          },
           total_pension_fund: {
+            type: DataTypes.DECIMAL(50, 2),
+            defaultValue: 0,
+          },
+          other_benefits: {
             type: DataTypes.DECIMAL(50, 2),
             defaultValue: 0,
           },
@@ -42,6 +58,10 @@ module.exports = (sequelize, DataTypes) => {
             defaultValue: 0,
           },
           loan_amount: {
+            type: DataTypes.DECIMAL(50, 2),
+            defaultValue: 0,
+          },
+          total_amount_car: {
             type: DataTypes.DECIMAL(50, 2),
             defaultValue: 0,
           },
@@ -85,6 +105,10 @@ module.exports = (sequelize, DataTypes) => {
             type: DataTypes.STRING(50),
             defaultValue: '0',
           },
+          seniority_pay_excluded_tax: {
+            type: DataTypes.STRING(50),
+            defaultValue: '0',
+          },
           total_amount_reduced: {
             type: DataTypes.DECIMAL(50, 2),
             defaultValue: 0,
@@ -96,6 +120,14 @@ module.exports = (sequelize, DataTypes) => {
           exchange_rate: {
             type: DataTypes.STRING,
             allowNull: true,
+          },
+          adjustment: {
+            type: DataTypes.STRING,
+            defaultValue: 0,
+          },
+          adjustment_include_taxe: {
+            type: DataTypes.STRING,
+            defaultValue: 0,
           },
           created_by: {
             type: DataTypes.BIGINT.UNSIGNED,

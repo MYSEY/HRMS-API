@@ -10,9 +10,14 @@ const getChildrenInfoId = catchAsync(async (req, res, next) => {
     /* #swagger.tags = ['ChildrenInfo']
     * #swagger.security = [{"bearerAuth": []}]
     */
+    const userAuth = JWTProvider.getTokenUser(req);
+    const { empleyee_id } = req.query;
+
     const id =  req.params.id;
     const childrenInfo = await ChildrenInfo.findAll({
         where: {
+            // employee_id: userAuth.Auth.id,
+            // employee_id: empleyee_id,
             employee_id: id,
             deleted_at: null,
         },
@@ -28,7 +33,7 @@ const getChildrenInfoId = catchAsync(async (req, res, next) => {
     if (!childrenInfo) return next(new HttpBadRequest("ChildrenInfo not found", 404));
     res.status(200).json({
         'status': true,
-        'data': childrenInfo
+        'datas': childrenInfo
     })
 });
 const createChildrenInfor = catchAsync(async (req, res, next) => {
