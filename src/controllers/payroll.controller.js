@@ -6,6 +6,7 @@ import JWTProvider from "../utils/jwt-provider";
 const { Op } = require('sequelize');
 
 const Payroll = db.Payroll;
+const User = db.user;
 
 const getPayrolls = catchAsync(async (req, res, next) => {
     /* #swagger.tags = ['Payrolls']
@@ -27,6 +28,13 @@ const getPayrolls = catchAsync(async (req, res, next) => {
         const payrolls = await Payroll.findAll({
             where:{ "employee_id": user.Auth.id},
             // attributes: [],
+            include: [
+                {
+                    model: User,
+                    attributes: ['pre_salary','basic_salary','salary_increas'],
+                    required: false,
+                },
+            ],
             order: [['id', 'DESC']],
         });
 

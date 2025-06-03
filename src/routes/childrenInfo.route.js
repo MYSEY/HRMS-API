@@ -9,7 +9,7 @@ const {
 
 const router = express.Router();
 
-router.get('/view-by-id', getChildrenInfoId);
+router.get('/view-by-id/:id', getChildrenInfoId);
 router.post('/create', createChildrenInfor);
 router.delete('/delete', deleteChildrenInfor);
 router.post('/update', updateChildrenInfor);

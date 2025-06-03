@@ -9,7 +9,7 @@ const {
 
 const router = express.Router();
 
-router.get('/view-by-id', getEducationId);
+router.get('/view-by-id/:id', getEducationId);
 router.post('/create', createEducation);
 router.delete('/delete', deleteEducation);
 router.post('/update', updateEducation);

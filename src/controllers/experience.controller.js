@@ -5,16 +5,27 @@ import { Math } from "core-js";
 import JWTProvider from "../utils/jwt-provider";
 
 const Experience = db.Experience;
+const Option = db.Option;
 const getExperienceId = catchAsync(async (req, res, next) => {
     /* #swagger.tags = ['Experience']
     * #swagger.security = [{"bearerAuth": []}]
     */
     const id =  req.params.id;
-    const experience = await Experience.findAll({where: {employee_id: id } });
+    const experience = await Experience.findAll({
+      where: {employee_id: id },
+      include: [
+          {
+              model: Option,
+              as: "type",
+              attributes: ['name_khmer','name_english'],
+              required: false,
+          },
+      ],
+    });
     if (!experience) return next(new HttpBadRequest("Experience not found", 404));
     res.status(200).json({
         'status': true,
-        'data': experience
+        'datas': experience
     })
 });
 const createExperience = catchAsync(async (req, res, next) => {

@@ -31,7 +31,7 @@ const getEducationId = catchAsync(async (req, res, next) => {
     if (!education) return next(new HttpBadRequest("Education not found", 404));
     res.status(200).json({
         'status': true,
-        'data': education
+        'datas': education
     })
 });
 const createEducation = catchAsync(async (req, res, next) => {
