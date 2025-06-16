@@ -54,6 +54,7 @@ db.user.belongsTo(db.Branch, { foreignKey: 'branch_id' });
 db.user.belongsTo(db.role, { foreignKey: 'role_id' });
 db.user.belongsTo(db.Option, { foreignKey: 'gender' });
 db.user.belongsTo(db.Option, { as: 'MarriedStatus', foreignKey: 'marital_status' });
+db.user.belongsTo(db.user, { as: 'lineManager', foreignKey: 'line_manager' });
 
 db.tax = require('./tax')(sequelize, DataTypes);
 db.ExchangeRate = require('./exchange_rate')(sequelize, DataTypes);
