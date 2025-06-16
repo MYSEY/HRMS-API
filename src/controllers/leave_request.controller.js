@@ -6,6 +6,7 @@ import moment from "moment";
 import { role, sequelize } from "../models";
 import JWTProvider from "../utils/jwt-provider";
 const { Op } = require('sequelize');
+const sendEmail = require('../services/mailer');
 const { parse, isWeekend, eachDayOfInterval } = require('date-fns');
 
 const LeaveRequest = db.LeaveRequest;
@@ -15,6 +16,7 @@ const DelegateLeave = db.DelegateLeave;
 const Branch = db.Branch;
 const Department = db.Department;
 const User = db.user;
+const Position = db.Position;
 
 const getLeaveRequests = catchAsync(async (req, res, next) => {
     /* #swagger.tags = ['Leave Requests']
@@ -245,6 +247,109 @@ const getEmployees = catchAsync(async (req, res, next) =>{
         leaveTypes: LeaveTypes,
     });
 });
+async function templateMail(requestData) {
+  const excludeSet = ['password', 'pre_salary', 'basic_salary', 'salary_increas'];
+  
+    const userApprover = await User.findOne({
+        where: {
+        id: requestData.next_approver,
+        deleted_at: null,
+        },
+        attributes:[
+            'employee_name_en', 'email'
+        ]
+    });
+
+    const user = await User.findOne({
+        where: {
+        id: requestData.employee_id,
+        deleted_at: null,
+        },
+        attributes: { exclude: excludeSet },
+        include: [
+            {
+                model: User,
+                as: 'lineManager',
+                attributes: ['id', 'employee_name_en', 'email'],
+                required: false,
+            },
+            {
+                model: Branch,
+                attributes: ['branch_name_kh', 'branch_name_en', 'address'],
+                required: false,
+            },
+            {
+                model: Position,
+                attributes: ['name_khmer', 'name_english'],
+                required: false,
+            },
+        ],
+    });
+    const recipients = [userApprover.email];
+    if (
+        user.lineManager &&
+        user.lineManager.email &&
+        user.lineManager.email !== userApprover.email
+    ) {
+        recipients.push(user.lineManager.email);
+    }
+
+  // Safely handle possible nulls
+  const employeeName = user.employee_name_en || 'Unknown Employee';
+  const personalPhoneNumber = user.personal_phone_number || '';
+  const agencyPhoneNumber = user.agency_phone_number || '';
+  const positionTitle = user.Position.name_english || 'Unknown Position';
+  const address = user.Branch.address || 'Unknown Position';
+
+  const htmlContent = `
+    <div style="font-family: Arial, sans-serif; padding: 20px; background-color: #f6f6f6;">
+      <div style="max-width: 600px; margin: auto; background: #ffffff; padding: 20px; border-radius: 8px;">
+        <h2 style="color: #6a1b9a;">Request Leave</h2>
+
+        <p>Dear Respective Management,</p>
+
+        <p>I would like to request to take leave and please kindly review and consider to approve accordingly.</p>
+
+        <table style="width: 100%; border-collapse: collapse; margin: 15px 0;">
+          <thead>
+            <tr>
+              <th style="border: 1px solid #ddd; padding: 8px; background-color: #eee;">From Date</th>
+              <th style="border: 1px solid #ddd; padding: 8px; background-color: #eee;">To Date</th>
+              <th style="border: 1px solid #ddd; padding: 8px; background-color: #eee;">Day Taken</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td style="border: 1px solid #ddd; padding: 8px; text-align: center">${requestData.start_date}</td>
+              <td style="border: 1px solid #ddd; padding: 8px; text-align: center">${requestData.end_date}</td>
+              <td style="border: 1px solid #ddd; padding: 8px; text-align: center">${requestData.number_of_day}</td>
+            </tr>
+          </tbody>
+        </table>
+
+        <p>Really appreciate for your approval.</p>
+
+        <p style="margin-top: 30px;"><strong>Best Regard,</strong></p>
+
+        <div style="line-height: 1.6;">
+          <strong>${employeeName}</strong><br />
+          <span style="color: #880e4f;">${positionTitle}</span><br />
+          <strong>Address:</strong> ${address}<br />
+          <strong>Tel:</strong> (+855) ${personalPhoneNumber} | (+855) ${agencyPhoneNumber}<br />
+          <strong>Website:</strong> <a href="https://www.camma.com.kh" target="_blank">www.camma.com.kh</a><br />
+          <strong>Facebook:</strong> <a href="https://facebook.com/Camma.MFI" target="_blank">facebook.com/Camma.MFI</a>
+        </div>
+      </div>
+    </div>
+  `;
+//  return htmlContent;
+    await sendEmail(
+        recipients.join(','),
+        'Request Leave',
+        'This is a leave request', // plain text fallback
+        htmlContent
+    );
+}
 
 async function duplicateLeave(requestData, employeeId) { 
     const startDate = requestData.start_date + " 00:00";
@@ -411,13 +516,14 @@ const createRequestLeave = catchAsync(async (req, res, next) => {
     };
     const startDate =  moment(req.body.start_date).format('YYYY-MM-DD', true);
     const endDate =  moment(req.body.end_date).format('YYYY-MM-DD', true);
-    const transaction = await db.sequelize.transaction();
 
     const userAuth = JWTProvider.getTokenUser(req);
+    const transaction = await db.sequelize.transaction();
     try {
         const userId = userAuth.Auth.id; // Assuming user authentication middleware sets req.user
         const duplicate = await duplicateLeave(data, userId);
         if (duplicate) {
+            await transaction.rollback();
             return res.status(404).json({
                 error: 'Start date and end date already exists',
                 status: 404,
@@ -491,6 +597,7 @@ const createRequestLeave = catchAsync(async (req, res, next) => {
         }
 
         if (!leaveType) {
+            await transaction.rollback();
             return res.status(404).json({ error: 'Leave type not found' });
         }
 
@@ -525,9 +632,8 @@ const createRequestLeave = catchAsync(async (req, res, next) => {
         data.created_by = userId;
         data.start_date =  startDate;
         data.end_date =  endDate;
-
         let resulf = await LeaveRequest.create(data, { transaction });
-
+        await templateMail(data);
         await transaction.commit();
         return res.status(200).json({
             success: 'leave request created successfully',
@@ -584,10 +690,11 @@ const createOnbehalfLeave = catchAsync(async (req, res, next) => {
         
     };
     const  employee = await User.findOne(filter);
-    // try {
+    try {
         const userId = employee.id; // Assuming user authentication middleware sets req.user
         const duplicate = await duplicateLeave(data, userId);
         if (duplicate) {
+            await transaction.rollback();
             return res.status(404).json({
                 error: 'Start date and end date already exists',
                 status: 404,
@@ -662,6 +769,7 @@ const createOnbehalfLeave = catchAsync(async (req, res, next) => {
         }
 
         if (!leaveType) {
+            await transaction.rollback();
             return res.status(404).json({ error: 'Leave type not found' });
         }
 
@@ -691,22 +799,22 @@ const createOnbehalfLeave = catchAsync(async (req, res, next) => {
         data.request_to = userAuth.Auth.id;
 
         let resulf = await LeaveRequest.create(data, { transaction });
-
+        await templateMail(data)
         await transaction.commit();
         return res.status(200).json({
             success: 'leave request created successfully',
             status: 200,
             data: resulf,
         });
-    // } catch (error) {
-    //     await transaction.rollback();
-    //     console.error('Error creating leave request:', error);
-    //     return res.status(500).json({ error: 'Leave request creation failed.' });
-    // }
+    } catch (error) {
+        await transaction.rollback();
+        console.error('Error creating leave request:', error);
+        return res.status(500).json({ error: 'Leave request creation failed.' });
+    }
 });
 
 const updateLeaveRequest = catchAsync(async (req, res, next) => {
-     /* #swagger.tags = ['Leave Requests']
+    /* #swagger.tags = ['Leave Requests']
     * #swagger.security = [{"bearerAuth": []}]
     */
      const transaction = await db.sequelize.transaction();
@@ -726,6 +834,7 @@ const updateLeaveRequest = catchAsync(async (req, res, next) => {
         // return false;
         const duplicate = await duplicateLeave(dataDubplicate, userId);
         if (duplicate) {
+            await transaction.rollback();
             return res.status(404).json({ error: 'Start date and End date already exists' });
         }
          
