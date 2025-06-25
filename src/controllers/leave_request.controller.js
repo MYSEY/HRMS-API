@@ -49,6 +49,12 @@ const getLeaveRequests = catchAsync(async (req, res, next) => {
                     required: false,
                 },
                 {
+                    model: User,
+                    as: 'HandoverStaff',
+                    attributes: ['employee_name_kh', 'employee_name_en'],
+                    required: false,
+                },
+                {
                     model: DelegateLeave,
                     as: 'DelegateLeave',
                     required: false,
@@ -151,7 +157,7 @@ const getLeaveApproves = catchAsync(async (req, res, next) => {
         where: {
             next_approver: userAuth.Auth.id,
             status: {
-                [Op.in]: ["approved_lm","approved_hod","pending"]
+                [Op.in]: ["approved_lm","approved_hod","pending", "pending_cancel"]
             }
         },
         order: [['id', 'DESC']],
@@ -633,7 +639,7 @@ const createRequestLeave = catchAsync(async (req, res, next) => {
         data.start_date =  startDate;
         data.end_date =  endDate;
         let resulf = await LeaveRequest.create(data, { transaction });
-        await templateMail(data);
+        // await templateMail(data);
         await transaction.commit();
         return res.status(200).json({
             success: 'leave request created successfully',
@@ -799,7 +805,7 @@ const createOnbehalfLeave = catchAsync(async (req, res, next) => {
         data.request_to = userAuth.Auth.id;
 
         let resulf = await LeaveRequest.create(data, { transaction });
-        await templateMail(data)
+        // await templateMail(data)
         await transaction.commit();
         return res.status(200).json({
             success: 'leave request created successfully',
@@ -1076,7 +1082,7 @@ const rejectLeave = catchAsync(async (req, res, next) => {
         });
         
         if (!data) {
-        return res.status(404).json({ message: "Leave Request not found" });
+            return res.status(404).json({ message: "Leave Request not found" });
         }
 
         const leaveAllocation = await LeaveAllocation.findOne({
@@ -1084,38 +1090,38 @@ const rejectLeave = catchAsync(async (req, res, next) => {
         });
 
         if (!leaveAllocation) {
-        return res.status(404).json({ message: "Leave Allocation not found" });
+            return res.status(404).json({ message: "Leave Allocation not found" });
         }
+        
         // Update leave balances based on leave type
         const { type } = data.leaveType;
-        const { number_of_day } = data;
+        let number_of_day = parseFloat(data.number_of_day);
 
-        if (type === "annual_leave") {
-            const currentAnnualLeave = leaveAllocation.total_annual_leave + number_of_day;
-            leaveAllocation.total_annual_leave = Math.min(
-                currentAnnualLeave,
-                leaveAllocation.default_annual_leave
-        );
-        } else if (type === "sick_leave") {
-            const currentSickLeave = leaveAllocation.total_sick_leave + number_of_day;
-            leaveAllocation.total_sick_leave = Math.min(
-                currentSickLeave,
-                leaveAllocation.default_sick_leave
-        );
-        } else if (type === "special_leave") {
-            const currentSpecialLeave = leaveAllocation.total_special_leave + number_of_day;
-            leaveAllocation.total_special_leave = Math.min(
-                currentSpecialLeave,
-                leaveAllocation.default_special_leave
-        );
-        } else if (type === "unpaid_leave") {
-            const currentUnpaidLeave = leaveAllocation.total_unpaid_leave + number_of_day;
-            leaveAllocation.total_unpaid_leave = Math.max(0, currentUnpaidLeave);
-        } else if (type === "long_sick_leave") {
-            const currentLongSickLeave = leaveAllocation.total_long_sick_leave + number_of_day;
-            leaveAllocation.total_long_sick_leave = Math.max(0, currentLongSickLeave);
+        if (type == "annual_leave") {
+            let current_annual_leave = parseFloat(leaveAllocation.total_annual_leave) + number_of_day;
+            leaveAllocation.total_annual_leave =  current_annual_leave > parseFloat(leaveAllocation.default_annual_leave) ? leaveAllocation.default_annual_leave : current_annual_leave;
+        }else if(type == "sick_leave"){
+            let current_sick_leave = parseFloat(leaveAllocation.total_sick_leave) + number_of_day;
+            leaveAllocation.total_sick_leave = current_sick_leave > parseFloat(leaveAllocation.default_sick_leave) ? leaveAllocation.default_sick_leave : current_sick_leave;
+        }else if(type == "special_leave") {
+            let current_special_leave = parseFloat(leaveAllocation.total_special_leave) + number_of_day;
+            leaveAllocation.total_special_leave = current_special_leave > parseFloat(leaveAllocation.default_special_leave) ? leaveAllocation.default_special_leave : current_special_leave;
+        }else if(type == "unpaid_leave"){
+            let current_unpaid_leave = parseFloat(leaveAllocation.total_unpaid_leave) + number_of_day;
+            if (current_unpaid_leave == 0) {
+                leaveAllocation.total_unpaid_leave = 0;
+            }else{
+                leaveAllocation.total_unpaid_leave = current_unpaid_leave;
+            }
+        }else if(type == "long_sick_leave"){
+            let current_long_sick_leave = parseFloat(leaveAllocation.total_long_sick_leave) + number_of_day;
+            if (current_long_sick_leave == 0) {
+                leaveAllocation.total_long_sick_leave = 0;
+            }else{
+                leaveAllocation.total_long_sick_leave = current_long_sick_leave;
+            }
         }
-
+        
         // Determine status based on role
         const userAuth = JWTProvider.getTokenUser(req);
         const userId = userAuth.Auth.id;
@@ -1141,7 +1147,7 @@ const rejectLeave = catchAsync(async (req, res, next) => {
         // Delete corresponding DelegateLeave entries
         await DelegateLeave.destroy({
             where: {
-                requester_id: Number(data.employee_id),
+                requester_id: data.employee_id,
                 start_date: new Date(data.start_date),
                 end_date: new Date(data.end_date),
             },
@@ -1234,6 +1240,61 @@ const deleteLeave = catchAsync(async (req, res, next) => {
         return res.status(500).json({ message: 'Leave request deletion failed', error: error.message });
     }
 })
+const cancelLeave = catchAsync(async (req, res, next) => {
+    /* #swagger.tags = ['Leave Requests']
+    * #swagger.security = [{"bearerAuth": []}]
+    */
+    const transaction = await db.sequelize.transaction();
+    try {
+        const userAuth = JWTProvider.getTokenUser(req);
+        const data = await LeaveRequest.findOne({
+            where: { id: req.body.id },
+            include: [{ model: LeaveType, required: false, }],
+            transaction,
+        });
+        if (!data) {
+            await transaction.rollback();
+            return res.status(404).json({ message: 'Leave request not found' });
+        }
+        const dataBranch = await Branch.findByPk(userAuth.Auth.branch_id, { transaction });
+        const dataDepartment = await Department.findByPk(userAuth.Auth.department_id, { transaction });
+       
+        data.next_approver = dataBranch.abbreviations === "HQ" 
+            ? dataDepartment.direct_manager_id 
+            : dataBranch.direct_manager_id;
+
+        const userId = userAuth.Auth.id;
+        // Role-based approvals
+        if(userAuth.role_type == "BOD") {
+            data.next_approver = null;
+        }else if (userAuth.role_type == "CEO") {
+            data.next_approver = userAuth.Auth.line_manager;
+        }else if (userAuth.role_type == "HOD" && userId == dataDepartment.direct_manager_id) {
+            data.next_approver = userAuth.Auth.line_manager;
+        }else if(userAuth.role_type == "DHOD" && userId == dataDepartment.direct_manager_id){
+            data.next_approver = userAuth.Auth.line_manager;
+        }else if(userAuth.role_type == "BM" && userId == dataBranch.direct_manager_id){
+            data.next_approver = userAuth.Auth.line_manager;
+        }else if(userAuth.role_type == "DBM" && userId == dataBranch.direct_manager_id){
+            data.next_approver = userAuth.Auth.line_manager;
+        }else if(userAuth.role_type == "HRAdmin" && userId == dataDepartment.direct_manager_id){
+            data.next_approver = userAuth.Auth.line_manager;
+        }
+
+        data.status = "pending_cancel";
+        data.remark = req.body.remark;
+        data.updated_by = userId;
+        await data.save({ transaction });
+        // Commit the transaction
+        await transaction.commit();
+        return res.status(200).json({ message: 'Leave request cancel successfully' });
+    } catch (error) {
+        // Rollback transaction in case of error
+        await transaction.rollback();
+        // Error response
+        return res.status(500).json({ message: 'Leave request cancel failed', error: error.message });
+    }
+})
 
 module.exports = {
     getLeaveRequests,
@@ -1245,5 +1306,6 @@ module.exports = {
     updateLeaveRequest,
     approveLeave,
     rejectLeave,
+    cancelLeave,
     deleteLeave,
 };

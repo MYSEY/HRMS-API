@@ -11,6 +11,7 @@ const {
     deleteLeave,
     approveLeave,
     rejectLeave,
+    cancelLeave,
 } = require('../controllers/leave_request.controller');
 
 const router = express.Router();
@@ -25,4 +26,5 @@ router.put('/update', updateLeaveRequest);
 router.delete('/delete', deleteLeave);
 router.post('/approve', approveLeave);
 router.post('/reject', rejectLeave);
+router.post('/cancel', cancelLeave);
 module.exports = router;
