@@ -6,6 +6,7 @@ const experienceRoute = require('./experience.route');
 const educationRoute = require('./education.route');
 const authRoute = require('./auth.route')
 const taxRoute = require('./tax.route')
+const systemCreate = require('./system_create.route')
 const trainingRoute = require('./training.route')
 const exchangeRateRoute = require('./exchange_rate.route')
 const bankRoute = require('./bank.route')
@@ -19,6 +20,7 @@ const leaveTypeRoute = require('./leave_type.route')
 const leaveAllocationRoute = require('./leave_allocation.route')
 const payrollRoute = require('./payroll.route')
 const publicHolidayRoute = require('./public_holiday.route')
+// const attendanceRoute = require('./attendance.route')
 
 import { UnauthorizedError } from "../utils/error";
 import JWTProvider from "../utils/jwt-provider";
@@ -42,6 +44,7 @@ const verify = async (req, res, next) => {
 
 export default ({ config, db }) => {
   let api = Router();
+  api.use('/system', systemCreate);
   // api.use('/users', userRoute);
   // api.use('/roles', roleRoute);
   api.use('/public/holidays', publicHolidayRoute);
@@ -68,6 +71,8 @@ export default ({ config, db }) => {
   api.use('/department', departmentRoute);
   api.use('/roles', roleRoute);
   api.use('/payrolls', payrollRoute);
+  // api.use('/attendance', attendanceRoute);
+  
 
   return api;
 };
