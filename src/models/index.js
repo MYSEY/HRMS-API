@@ -56,6 +56,8 @@ db.user.belongsTo(db.Option, { foreignKey: 'gender' });
 db.user.belongsTo(db.Option, { as: 'MarriedStatus', foreignKey: 'marital_status' });
 db.user.belongsTo(db.user, { as: 'lineManager', foreignKey: 'line_manager' });
 
+db.system = require('./system')(sequelize, DataTypes);
+
 db.tax = require('./tax')(sequelize, DataTypes);
 db.ExchangeRate = require('./exchange_rate')(sequelize, DataTypes);
 db.Bank = require('./bank')(sequelize, DataTypes);
@@ -102,6 +104,7 @@ db.Payroll = require('./payroll')(sequelize, DataTypes);
 db.Payroll.belongsTo(db.user, { foreignKey: 'employee_id' });
 db.PublicHoliday = require('./public_holiday')(sequelize, DataTypes);
 
+// db.Attendance = require('./attendance')(sequelize, DataTypes);
 
 db.sequelize.sync({force: false})
 .then(() => {
