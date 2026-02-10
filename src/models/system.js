@@ -5,7 +5,11 @@ module.exports = (sequelize, DataTypes) => {
         name: DataTypes.STRING,
         description: DataTypes.STRING,
         icon: DataTypes.STRING,
-        url: DataTypes.STRING,
+        url: {
+            type: DataTypes.JSON, 
+            allowNull: true,
+            defaultValue: [] 
+        },
         color: DataTypes.STRING,
     }, {
         timestamps: false, // បិទវាចោល ប្រសិនបើក្នុង Table គ្មាន createdAt/updatedAt
